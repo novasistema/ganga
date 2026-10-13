@@ -1,0 +1,148 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Importer product inventory catalog with costs and pricing",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string", "maxLength": 200 },
+        "sku": { "type": "string", "maxLength": 50 },
+        "category": { "type": "string", "maxLength": 100 },
+        "costPriceUSD": { "type": "number" },
+        "freightCostUSD": { "type": "number" },
+        "importDutiesUSD": { "type": "number" },
+        "exchangeRate": { "type": "number" },
+        "finalPriceARS": { "type": "number" },
+        "stock": { "type": "integer" },
+        "minStock": { "type": "integer" },
+        "supplier": { "type": "string", "maxLength": 150 },
+        "containerBatch": { "type": "string", "maxLength": 100 },
+        "imageUrl": { "type": "string" },
+        "description": { "type": "string", "maxLength": 2000 },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "sku", "costPriceUSD", "finalPriceARS", "stock"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Customer database for B2B and retail sales",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "company": { "type": "string" },
+        "taxId": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "priceTier": { "type": "string", "enum": ["Minorista", "Mayorista", "Distribuidor"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "priceTier"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer e-commerce or internal orders for warehouse preparation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "customerEmail": { "type": "string", "maxLength": 150 },
+        "customerPhone": { "type": "string", "maxLength": 50 },
+        "shippingAddress": { "type": "string", "maxLength": 300 },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "shipping": { "type": "number" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["Pendiente de Pago", "Pagado", "En Preparación", "Listo para Despacho", "Despachado", "Entregado", "Cancelado"] },
+        "paymentMethod": { "type": "string" },
+        "paymentId": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "orderNumber", "customerName", "total", "status"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Electronic invoices / fiscal tickets",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerTaxId": { "type": "string" },
+        "customerAddress": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "taxIVA": { "type": "number" },
+        "total": { "type": "number" },
+        "issueDate": { "type": "string" },
+        "status": { "type": "string" },
+        "cae": { "type": "string" },
+        "caeDueDate": { "type": "string" }
+      },
+      "required": ["id", "invoiceNumber", "total", "issueDate"]
+    },
+    "MercadoPagoTransaction": {
+      "title": "MercadoPagoTransaction",
+      "description": "Mercado Pago payment records and fund tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "paymentId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string" },
+        "payerEmail": { "type": "string" },
+        "paymentMethodId": { "type": "string" },
+        "dateApproved": { "type": "string" },
+        "fee": { "type": "number" }
+      },
+      "required": ["id", "paymentId", "amount", "status"]
+    },
+    "Supplier": {
+      "title": "Supplier",
+      "description": "International and local suppliers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "country": { "type": "string" },
+        "contactPerson": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" }
+      },
+      "required": ["id", "name", "country"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Importer products collection"
+    },
+    "/customers/{customerId}": {
+      "schema": { "$ref": "#/entities/Customer" },
+      "description": "Customer database collection"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Orders collection for e-commerce and warehouse"
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Electronic invoices collection"
+    },
+    "/mercado_pago_transactions/{txId}": {
+      "schema": { "$ref": "#/entities/MercadoPagoTransaction" },
+      "description": "Mercado Pago transaction logs"
+    },
+    "/suppliers/{supplierId}": {
+      "schema": { "$ref": "#/entities/Supplier" },
+      "description": "Suppliers collection"
+    }
+  }
+}
