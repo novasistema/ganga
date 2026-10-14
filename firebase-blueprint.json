@@ -2,157 +2,74 @@
   "entities": {
     "Product": {
       "title": "Product",
-      "description": "NUVOH catalog product with wholesale pricing tiers and specifications",
+      "description": "Item imported from dropshipping supplier or created manually",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" },
-        "hook": { "type": "string" },
-        "category": { "type": "string" },
-        "sku": { "type": "string" },
-        "code": { "type": "string" },
-        "brand": { "type": "string" },
-        "priceUnit": { "type": "number" },
-        "priceTiers": { "type": "object" },
-        "badges": { "type": "array" },
-        "specs": { "type": "array" },
-        "image": { "type": "string" },
+        "title": { "type": "string", "maxLength": 250 },
+        "description": { "type": "string", "maxLength": 5000 },
+        "originalPrice": { "type": "number" },
+        "markupPercentage": { "type": "number" },
+        "finalPrice": { "type": "number" },
+        "category": { "type": "string", "maxLength": 100 },
+        "imageUrl": { "type": "string", "maxLength": 1000 },
         "stock": { "type": "number" },
+        "supplierUrl": { "type": "string", "maxLength": 1000 },
+        "inStock": { "type": "boolean" },
         "featured": { "type": "boolean" },
-        "isNew": { "type": "boolean" }
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
       },
-      "required": ["id", "name", "category", "sku", "priceUnit", "stock"]
+      "required": ["title", "finalPrice", "category", "imageUrl"]
     },
     "Order": {
       "title": "Order",
-      "description": "Wholesale store purchase order",
+      "description": "Customer purchase order through the store checkout",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "orderNumber": { "type": "string" },
-        "customerName": { "type": "string" },
-        "businessName": { "type": "string" },
-        "documentId": { "type": "string" },
-        "phone": { "type": "string" },
-        "email": { "type": "string" },
-        "shippingAddress": { "type": "string" },
-        "city": { "type": "string" },
-        "province": { "type": "string" },
-        "shippingMethod": { "type": "string" },
-        "paymentMethod": { "type": "string" },
-        "items": { "type": "array" },
-        "subtotal": { "type": "number" },
-        "discount": { "type": "number" },
-        "total": { "type": "number" },
-        "status": { "type": "string" },
-        "notes": { "type": "string" },
-        "createdAt": { "type": "string" }
-      },
-      "required": ["orderNumber", "customerName", "phone", "shippingAddress", "city", "total", "status"]
-    },
-    "Deal": {
-      "title": "Deal",
-      "description": "CRM commercial deal and pipeline stage",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "customerName": { "type": "string" },
-        "businessName": { "type": "string" },
-        "phone": { "type": "string" },
-        "email": { "type": "string" },
-        "city": { "type": "string" },
-        "stage": { "type": "string" },
-        "items": { "type": "array" },
+        "customerName": { "type": "string", "maxLength": 120 },
+        "customerEmail": { "type": "string", "maxLength": 150 },
+        "customerPhone": { "type": "string", "maxLength": 50 },
+        "customerAddress": { "type": "string", "maxLength": 300 },
         "totalAmount": { "type": "number" },
-        "notes": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" },
-        "assignedSalesperson": { "type": "string" }
-      },
-      "required": ["customerName", "phone", "stage", "totalAmount"]
-    },
-    "Client": {
-      "title": "Client",
-      "description": "Wholesale client and distributor profile",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "name": { "type": "string" },
-        "businessName": { "type": "string" },
-        "cuitOrDni": { "type": "string" },
-        "phone": { "type": "string" },
-        "email": { "type": "string" },
-        "city": { "type": "string" },
-        "province": { "type": "string" },
-        "tier": { "type": "string" },
-        "totalSpent": { "type": "number" },
-        "orderCount": { "type": "number" },
-        "notes": { "type": "string" },
-        "lastContact": { "type": "string" }
-      },
-      "required": ["name", "businessName", "phone", "tier"]
-    },
-    "Interaction": {
-      "title": "Interaction",
-      "description": "Customer interaction log or note in CRM",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string" },
-        "clientId": { "type": "string" },
-        "dealId": { "type": "string" },
-        "type": { "type": "string" },
-        "note": { "type": "string" },
+        "paymentMethod": { "type": "string", "maxLength": 50 },
+        "paymentStatus": { "type": "string", "maxLength": 50 },
+        "orderStatus": { "type": "string", "maxLength": 50 },
         "createdAt": { "type": "string" }
       },
-      "required": ["type", "note", "createdAt"]
+      "required": ["customerName", "customerEmail", "totalAmount", "paymentMethod", "orderStatus"]
     },
-    "CompanySettings": {
-      "title": "CompanySettings",
-      "description": "Company data and payment methods configuration",
+    "Settings": {
+      "title": "Settings",
+      "description": "Store profile, profit margin default and payment gateway settings",
       "type": "object",
       "properties": {
-        "companyName": { "type": "string" },
-        "legalName": { "type": "string" },
-        "cuit": { "type": "string" },
-        "address": { "type": "string" },
-        "phone": { "type": "string" },
-        "email": { "type": "string" },
-        "minimumOrder": { "type": "number" },
-        "bankName": { "type": "string" },
-        "accountHolder": { "type": "string" },
-        "cbu": { "type": "string" },
-        "alias": { "type": "string" },
-        "cardPaymentsEnabled": { "type": "boolean" },
-        "installmentsAllowed": { "type": "array" },
+        "companyName": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "whatsappNumber": { "type": "string", "maxLength": 50 },
+        "defaultProfitMargin": { "type": "number" },
+        "bankName": { "type": "string", "maxLength": 100 },
+        "bankCbuAlias": { "type": "string", "maxLength": 100 },
+        "bankAccountHolder": { "type": "string", "maxLength": 150 },
         "updatedAt": { "type": "string" }
       },
-      "required": ["companyName", "legalName", "cuit", "cbu", "alias"]
+      "required": ["companyName", "defaultProfitMargin"]
     }
   },
   "firestore": {
     "/products/{productId}": {
       "schema": "Product",
-      "description": "Public catalog items"
+      "description": "Catalog of available dropshipping products"
     },
     "/orders/{orderId}": {
       "schema": "Order",
-      "description": "Orders created by buyers and tracked in CRM"
+      "description": "Orders placed by customers"
     },
-    "/deals/{dealId}": {
-      "schema": "Deal",
-      "description": "Sales pipeline commercial opportunities"
-    },
-    "/clients/{clientId}": {
-      "schema": "Client",
-      "description": "Wholesale client directory"
-    },
-    "/interactions/{interactionId}": {
-      "schema": "Interaction",
-      "description": "CRM interaction notes and history"
-    },
-    "/settings/{settingId}": {
-      "schema": "CompanySettings",
-      "description": "Company profile and payment method settings"
+    "/settings/{settingsId}": {
+      "schema": "Settings",
+      "description": "Company, margin and payment details"
     }
   }
 }

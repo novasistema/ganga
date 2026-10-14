@@ -1,6 +1,7 @@
 {
-  "name": "NUVOH Mayorista & CRM Ventas",
-  "description": "Tienda de comercio mayorista online y CRM de ventas con catálogo oficial NUVOH, pedidos escalonados y pipeline comercial.",
+  "name": "DropStore Pro - Dropshipping & CRM",
+  "description": "Plataforma de dropshipping y e-commerce con extractor de productos por link, cálculo dinámico de márgenes de ganancia, CRM administrativo, inventario en tiempo real y pasarela de pago integrada.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
+
