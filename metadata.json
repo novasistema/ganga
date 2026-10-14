@@ -1,4 +1,6 @@
 {
-  "name": "Remix erp ventas COPIA NOVA",
-  "description": "Cyber-ERP \u0026 Global Commerce System"
+  "name": "NUVOH Mayorista & CRM Ventas",
+  "description": "Tienda de comercio mayorista online y CRM de ventas con catálogo oficial NUVOH, pedidos escalonados y pipeline comercial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

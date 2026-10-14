@@ -1,109 +1,156 @@
+export interface ProductSpec {
+  label: string;
+  desc: string;
+  iconName?: string;
+}
+
+export interface ProductTierPricing {
+  tier5?: number;
+  tier10?: number;
+  tier100?: number;
+}
+
 export interface Product {
   id: string;
-  title: string;
+  name: string;
+  hook: string;
+  category: 'Cocina y Electro' | 'Hogar y Climatización' | 'Herramientas y Ferretería' | 'Muebles y Decoración' | 'Cuidado Personal y Deportes' | 'Tecno y Varios';
   sku: string;
-  category: string;
-  costPriceUSD: number;
-  costARS?: number;
-  markupPercent?: number;
-  freightCostUSD: number;
-  importDutiesUSD: number;
-  exchangeRate: number;
-  finalPriceARS: number;
+  code?: string;
+  brand: string;
+  priceUnit: number;
+  priceTiers: ProductTierPricing;
+  badges: string[];
+  specs: ProductSpec[];
+  image: string;
   stock: number;
-  minStock: number;
-  supplier: string;
-  containerBatch: string;
-  imageUrl: string;
-  description: string;
-  sourceWebUrl?: string; // URL o página web de donde proviene el producto para realizar el pedido
-  sourceWebName?: string; // Nombre de la página / proveedor de origen
-  active: boolean;
-  createdAt: string;
-}
-
-export interface Customer {
-  id: string;
-  name: string;
-  company: string;
-  taxId: string;
-  email: string;
-  phone: string;
-  address: string;
-  priceTier: 'Minorista' | 'Mayorista' | 'Distribuidor';
-  createdAt: string;
-}
-
-export interface Supplier {
-  id: string;
-  name: string;
-  country: string;
-  contactPerson: string;
-  email: string;
-  phone: string;
-  leadTimeDays: number;
-  activeShipments: number;
+  isNew?: boolean;
+  featured?: boolean;
 }
 
 export interface CartItem {
   product: Product;
   quantity: number;
+  unitPriceApplied: number;
+  totalPrice: number;
 }
 
-export interface OrderItem {
-  productId: string;
-  title: string;
-  sku: string;
-  quantity: number;
-  price: number;
+export type DealStage = 'lead' | 'contacted' | 'quoted' | 'payment_pending' | 'won' | 'lost';
+
+export interface Deal {
+  id: string;
+  customerName: string;
+  businessName?: string;
+  phone: string;
+  email?: string;
+  city: string;
+  stage: DealStage;
+  items: { productId: string; productName: string; quantity: number; unitPrice: number }[];
+  totalAmount: number;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  assignedSalesperson?: string;
 }
 
-export type OrderStatus = 'Pendiente de Pago' | 'Pagado' | 'En Preparación' | 'Listo para Despacho' | 'Despachado' | 'Entregado' | 'Cancelado';
+export type OrderStatus = 'pending_payment' | 'paid' | 'preparing' | 'shipped' | 'delivered' | 'cancelled';
 
 export interface Order {
   id: string;
   orderNumber: string;
   customerName: string;
-  customerEmail: string;
-  customerPhone: string;
+  businessName?: string;
+  documentId?: string; // DNI o CUIT
+  phone: string;
+  email?: string;
   shippingAddress: string;
-  items: OrderItem[];
+  city: string;
+  province: string;
+  shippingMethod: 'transporte_expreso' | 'retiro_deposito' | 'correo_argentino';
+  shippingCost: number;
+  paymentMethod: 'transferencia' | 'tarjeta_segura' | 'efectivo_deposito' | 'acuerdo_comercial';
+  paymentDetails?: {
+    cardLast4?: string;
+    cardBrand?: string;
+    transactionId?: string;
+  };
+  invoiceType: 'A' | 'B';
+  items: CartItem[];
   subtotal: number;
-  shipping: number;
+  discount: number;
+  taxAmount: number;
   total: number;
   status: OrderStatus;
-  paymentMethod: 'Mercado Pago' | 'Transferencia Bancaria' | 'Efectivo';
-  paymentId?: string;
+  notes?: string;
   createdAt: string;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  businessName: string;
+  cuitOrDni: string;
+  phone: string;
+  email: string;
+  city: string;
+  province: string;
+  tier: 'Minorista' | 'Mayorista Plata' | 'Mayorista Oro' | 'Distribuidor';
+  totalSpent: number;
+  orderCount: number;
+  notes: string;
+  lastContact: string;
+}
+
+export interface Interaction {
+  id: string;
+  clientId: string;
+  dealId?: string;
+  type: 'whatsapp' | 'llamada' | 'email' | 'reunion' | 'nota';
+  note: string;
+  author: string;
+  createdAt: string;
+  urgency?: 'normal' | 'high' | 'urgent';
+  clientName?: string;
+}
+
+export type NotificationType = 'new_order' | 'urgent_interaction' | 'payment_received' | 'low_stock' | 'deal_won';
+export type NotificationPriority = 'normal' | 'high' | 'urgent';
+
+export interface CrmNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  createdAt: string;
+  isRead: boolean;
+  priority: NotificationPriority;
+  entityId?: string;
+  entityType?: 'order' | 'interaction' | 'deal' | 'client';
+  metadata?: {
+    orderNumber?: string;
+    total?: number;
+    clientName?: string;
+    phone?: string;
+    urgencyReason?: string;
+  };
+}
+
+export interface CompanySettings {
+  companyName: string;
+  legalName: string;
+  cuit: string;
+  address: string;
+  city: string;
+  province: string;
+  phone: string;
+  email: string;
+  minimumOrder: number;
+  bankName: string;
+  accountHolder: string;
+  cbu: string;
+  alias: string;
+  cardPaymentsEnabled: boolean;
+  installmentsAllowed: number[];
   updatedAt: string;
 }
 
-export interface Invoice {
-  id: string;
-  invoiceNumber: string;
-  orderId?: string;
-  customerName: string;
-  customerTaxId: string;
-  customerAddress: string;
-  items: OrderItem[];
-  subtotal: number;
-  taxIVA: number;
-  total: number;
-  issueDate: string;
-  status: 'Emitida' | 'Anulada';
-  cae: string;
-  caeDueDate: string;
-}
-
-export interface MercadoPagoTransaction {
-  id: string;
-  paymentId: string;
-  orderId: string;
-  amount: number;
-  currency: string;
-  status: 'approved' | 'pending' | 'rejected';
-  payerEmail: string;
-  paymentMethodId: string;
-  dateApproved: string;
-  fee: number;
-}
