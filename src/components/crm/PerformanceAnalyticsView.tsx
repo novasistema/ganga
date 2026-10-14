@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { formatCurrency } from '../../utils/formatters';
+import { resolveProductImage, handleImageError } from '../../utils/imageUtils';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -819,9 +820,10 @@ export const PerformanceAnalyticsView: React.FC = () => {
                     <td className="py-3.5 px-4 font-bold text-zinc-900">
                       <div className="flex items-center gap-3">
                         <img 
-                          src={prod.image} 
+                          src={resolveProductImage(prod.image, prod.category)} 
                           alt={prod.name} 
-                          className="w-10 h-10 object-cover rounded-lg border border-zinc-200 shrink-0" 
+                          onError={(e) => handleImageError(e, prod.category)}
+                          className="w-10 h-10 object-contain rounded-lg border border-zinc-200 shrink-0 bg-white p-0.5" 
                         />
                         <div className="min-w-0">
                           <div className="truncate font-black">{prod.name}</div>

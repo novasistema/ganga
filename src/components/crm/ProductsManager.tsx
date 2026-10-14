@@ -3,6 +3,7 @@ import { useStore } from '../../context/StoreContext';
 import { Product } from '../../types';
 import { CATALOG_CATEGORIES } from '../../data/products';
 import { formatCurrency } from '../../utils/formatters';
+import { resolveProductImage, handleImageError } from '../../utils/imageUtils';
 import { 
   Package, 
   Plus, 
@@ -367,8 +368,9 @@ export const ProductsManager: React.FC = () => {
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-3">
                         <img
-                          src={product.image}
+                          src={resolveProductImage(product.image, product.category)}
                           alt={product.name}
+                          onError={(e) => handleImageError(e, product.category)}
                           className="w-12 h-12 object-contain rounded-xl bg-zinc-50 p-1 border border-zinc-200 shrink-0"
                           loading="lazy"
                         />
@@ -544,8 +546,9 @@ export const ProductsManager: React.FC = () => {
                 {/* Image showcase */}
                 <div className="p-4 pt-1 flex items-center justify-center h-44 bg-zinc-50/50">
                   <img
-                    src={product.image}
+                    src={resolveProductImage(product.image, product.category)}
                     alt={product.name}
+                    onError={(e) => handleImageError(e, product.category)}
                     className="max-h-full max-w-full object-contain group-hover:scale-105 transition-transform"
                     loading="lazy"
                   />

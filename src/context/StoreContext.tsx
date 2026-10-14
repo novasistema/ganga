@@ -5,6 +5,7 @@ import { INITIAL_DEALS, INITIAL_CLIENTS, INITIAL_ORDERS, INITIAL_INTERACTIONS, I
 import { DEFAULT_COMPANY_SETTINGS } from '../data/defaultSettings';
 import { calculateUnitPrice, formatCurrency } from '../utils/formatters';
 import { playNotificationSound } from '../utils/sound';
+import { resolveProductImage } from '../utils/imageUtils';
 import { testConnection } from '../firebase';
 import { 
   seedInitialDataIfEmpty,
@@ -739,7 +740,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addProduct = async (productData: Omit<Product, 'id'>) => {
     const newProduct: Product = {
       ...productData,
-      id: `prod-${Date.now()}`
+      id: `prod-${Date.now()}`,
+      image: resolveProductImage(productData.image, productData.category)
     };
     setProducts((prev) => [newProduct, ...prev]);
     try {
@@ -750,11 +752,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const updateProduct = async (updatedProduct: Product) => {
+    const normalized: Product = {
+      ...updatedProduct,
+      image: resolveProductImage(updatedProduct.image, updatedProduct.category)
+    };
     setProducts((prev) =>
-      prev.map((p) => (p.id === updatedProduct.id ? updatedProduct : p))
+      prev.map((p) => (p.id === normalized.id ? normalized : p))
     );
     try {
-      await saveProductToFirestore(updatedProduct);
+      await saveProductToFirestore(normalized);
     } catch (e) {
       console.error('Failed to update product in Firestore:', e);
     }

@@ -1,4 +1,5 @@
 import { Deal, Client, Order } from '../types';
+import { ASSET_IMAGES } from '../utils/imageUtils';
 
 export const INITIAL_CLIENTS: Client[] = [
   {
@@ -187,7 +188,7 @@ export const INITIAL_ORDERS: Order[] = [
           priceTiers: { tier5: 485000, tier10: 475000 },
           badges: ['ELEVABLE', 'GUARDADO'],
           specs: [],
-          image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+          image: ASSET_IMAGES.hero,
           stock: 18
         },
         quantity: 1,
@@ -206,7 +207,7 @@ export const INITIAL_ORDERS: Order[] = [
           priceTiers: { tier5: 258000, tier10: 248000 },
           badges: ['TAPIZADA', 'CAMEL'],
           specs: [],
-          image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+          image: ASSET_IMAGES.hero,
           stock: 30
         },
         quantity: 1,
@@ -250,7 +251,7 @@ export const INITIAL_ORDERS: Order[] = [
           priceTiers: { tier5: 138000, tier10: 137000 },
           badges: ['50 L', '2000 W'],
           specs: [],
-          image: '/src/assets/images/nuvoh_horno_electrico_1791905594716.jpg',
+          image: ASSET_IMAGES.horno,
           stock: 45
         },
         quantity: 5,

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { formatCurrency, calculateUnitPrice, generateWhatsAppLink } from '../../utils/formatters';
+import { resolveProductImage, handleImageError } from '../../utils/imageUtils';
 import { 
   X, 
   ShoppingCart, 
@@ -73,9 +74,10 @@ export const ProductDetailModal: React.FC = () => {
                 ))}
               </div>
               <img
-                src={product.image}
+                src={resolveProductImage(product.image, product.category)}
                 alt={product.name}
                 referrerPolicy="no-referrer"
+                onError={(e) => handleImageError(e, product.category)}
                 className="w-full h-60 object-contain drop-shadow-sm"
               />
               <div className="mt-4 flex items-center gap-4 text-xs text-zinc-500">

@@ -12,6 +12,7 @@ import { Product, Order, Deal, Client, Interaction, CompanySettings, CrmNotifica
 import { INITIAL_PRODUCTS } from '../data/products';
 import { INITIAL_DEALS, INITIAL_CLIENTS, INITIAL_ORDERS, INITIAL_INTERACTIONS, INITIAL_NOTIFICATIONS } from '../data/crmMockData';
 import { DEFAULT_COMPANY_SETTINGS } from '../data/defaultSettings';
+import { resolveProductImage } from '../utils/imageUtils';
 
 export enum OperationType {
   CREATE = 'create',
@@ -144,7 +145,13 @@ export function subscribeToProducts(callback: (products: Product[]) => void) {
     collection(db, 'products'),
     (snap) => {
       const prods: Product[] = [];
-      snap.forEach((d) => prods.push(d.data() as Product));
+      snap.forEach((d) => {
+        const p = d.data() as Product;
+        prods.push({
+          ...p,
+          image: resolveProductImage(p.image, p.category)
+        });
+      });
       callback(prods.length > 0 ? prods : INITIAL_PRODUCTS);
     },
     (err) => {
@@ -158,7 +165,20 @@ export function subscribeToOrders(callback: (orders: Order[]) => void) {
     collection(db, 'orders'),
     (snap) => {
       const ordersList: Order[] = [];
-      snap.forEach((d) => ordersList.push(d.data() as Order));
+      snap.forEach((d) => {
+        const order = d.data() as Order;
+        const normalizedItems = (order.items || []).map((it) => ({
+          ...it,
+          product: {
+            ...it.product,
+            image: resolveProductImage(it.product.image, it.product.category)
+          }
+        }));
+        ordersList.push({
+          ...order,
+          items: normalizedItems
+        });
+      });
       // Sort newest first
       ordersList.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       callback(ordersList.length > 0 ? ordersList : INITIAL_ORDERS);

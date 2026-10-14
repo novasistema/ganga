@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { CATALOG_CATEGORIES } from '../../data/products';
+import { CATALOG_CATEGORIES, HERO_IMAGE } from '../../data/products';
+import { handleImageError } from '../../utils/imageUtils';
 import { ProductCard } from './ProductCard';
 import { WholesaleNoticeBanner } from '../common/WholesaleNoticeBanner';
 import { 
@@ -112,9 +113,10 @@ export const Storefront: React.FC = () => {
             <div className="lg:col-span-5 relative flex justify-center">
               <div className="relative w-full max-w-md rounded-2xl overflow-hidden border border-zinc-700/80 shadow-2xl bg-zinc-900 group">
                 <img
-                  src="/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg"
+                  src={HERO_IMAGE}
                   alt="Nuvoh Catálogo General"
                   referrerPolicy="no-referrer"
+                  onError={handleImageError}
                   className="w-full h-72 sm:h-80 object-cover object-center group-hover:scale-102 transition-transform duration-500"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent" />

@@ -3,6 +3,7 @@ import { useStore } from '../../context/StoreContext';
 import { Product, ProductSpec } from '../../types';
 import { CATALOG_CATEGORIES, HERO_IMAGE } from '../../data/products';
 import { formatCurrency } from '../../utils/formatters';
+import { ASSET_IMAGES, resolveProductImage, handleImageError } from '../../utils/imageUtils';
 import { 
   X, 
   Save, 
@@ -32,11 +33,11 @@ import {
 } from 'lucide-react';
 
 const PRESET_IMAGES = [
-  { label: 'Horno Eléctrico 50L (Nuvoh)', url: '/src/assets/images/nuvoh_horno_electrico_1791905594716.jpg' },
-  { label: 'Cafetera Expresso Vintage (Nuvoh)', url: '/src/assets/images/nuvoh_cafetera_expresso_1791905596557.jpg' },
-  { label: 'Taladro 48V con Maletín (Nuvoh)', url: '/src/assets/images/nuvoh_taladro_maletin_1791905596424.jpg' },
-  { label: 'Silla Gamer Ergonómica (Nuvoh)', url: '/src/assets/images/nuvoh_silla_gamer_1791905596483.jpg' },
-  { label: 'Portada Catálogo Nuvoh', url: HERO_IMAGE },
+  { label: 'Horno Eléctrico 50L (Nuvoh)', url: ASSET_IMAGES.horno },
+  { label: 'Cafetera Expresso Vintage (Nuvoh)', url: ASSET_IMAGES.cafetera },
+  { label: 'Taladro 48V con Maletín (Nuvoh)', url: ASSET_IMAGES.taladro },
+  { label: 'Silla Gamer Ergonómica (Nuvoh)', url: ASSET_IMAGES.silla },
+  { label: 'Portada Catálogo Nuvoh', url: ASSET_IMAGES.hero },
   { label: 'Pava Eléctrica Inox', url: 'https://images.unsplash.com/photo-1594213114663-d94db9b17125?auto=format&fit=crop&w=600&q=80' },
   { label: 'Licuadora de Mesa', url: 'https://images.unsplash.com/photo-1570222094114-d054a817e56b?auto=format&fit=crop&w=600&q=80' },
   { label: 'Ventilador de Pie', url: 'https://images.unsplash.com/photo-1618944847828-82e943c3bdb7?auto=format&fit=crop&w=600&q=80' },
@@ -125,7 +126,7 @@ export const ProductEditModal: React.FC = () => {
       setTier10(115200);
       setTier100(111600);
       setStock(30);
-      setImage('/src/assets/images/nuvoh_horno_electrico_1791905594716.jpg');
+      setImage(ASSET_IMAGES.horno);
       setBadges(['STOCK INMEDIATO', 'GARANTÍA OFICIAL']);
       setSpecs([
         { label: 'POTENCIA / CAPACIDAD', desc: 'Rendimiento industrial para hogar y comercio', iconName: 'zap' },
@@ -710,8 +711,9 @@ export const ProductEditModal: React.FC = () => {
                       }`}
                     >
                       <img
-                        src={preset.url}
+                        src={resolveProductImage(preset.url)}
                         alt={preset.label}
+                        onError={(e) => handleImageError(e)}
                         className="w-12 h-12 object-contain rounded-lg bg-white p-1 border border-zinc-200 shrink-0"
                       />
                       <div className="overflow-hidden">
@@ -735,11 +737,9 @@ export const ProductEditModal: React.FC = () => {
                   </span>
                   <div className="w-56 h-48 bg-white rounded-xl border border-zinc-200 p-2 flex items-center justify-center overflow-hidden shadow-xs">
                     <img
-                      src={image}
+                      src={resolveProductImage(image, category)}
                       alt="Vista previa"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = HERO_IMAGE;
-                      }}
+                      onError={(e) => handleImageError(e, category)}
                       className="max-h-full max-w-full object-contain"
                     />
                   </div>

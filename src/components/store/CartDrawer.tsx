@@ -1,6 +1,7 @@
 import React from 'react';
 import { useStore } from '../../context/StoreContext';
 import { formatCurrency, generateWhatsAppLink } from '../../utils/formatters';
+import { resolveProductImage, handleImageError } from '../../utils/imageUtils';
 import { WHOLESALE_MINIMUM_ORDER } from '../../data/products';
 import { 
   X, 
@@ -141,9 +142,10 @@ export const CartDrawer: React.FC = () => {
                   className="bg-white rounded-xl p-3 border border-zinc-200 shadow-xs flex items-center gap-3"
                 >
                   <img
-                    src={item.product.image}
+                    src={resolveProductImage(item.product.image, item.product.category)}
                     alt={item.product.name}
                     referrerPolicy="no-referrer"
+                    onError={(e) => handleImageError(e, item.product.category)}
                     className="w-16 h-16 object-contain bg-zinc-50 rounded-lg p-1 shrink-0 border border-zinc-100"
                   />
 

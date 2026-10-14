@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { formatCurrency, generateWhatsAppLink } from '../../utils/formatters';
+import { resolveProductImage, handleImageError } from '../../utils/imageUtils';
 import { 
   Plus, 
   Minus, 
@@ -116,9 +117,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           className="relative px-5 py-4 cursor-pointer bg-radial from-zinc-50 to-white flex items-center justify-center overflow-hidden min-h-56"
         >
           <img
-            src={product.image}
+            src={resolveProductImage(product.image, product.category)}
             alt={product.name}
             referrerPolicy="no-referrer"
+            onError={(e) => handleImageError(e, product.category)}
             className="w-full h-48 object-contain transition-transform duration-300 group-hover:scale-103"
             loading="lazy"
           />

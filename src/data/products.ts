@@ -1,6 +1,7 @@
 import { Product } from '../types';
+import { ASSET_IMAGES } from '../utils/imageUtils';
 
-export const HERO_IMAGE = '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg';
+export const HERO_IMAGE = ASSET_IMAGES.hero;
 
 export const CATALOG_CATEGORIES = [
   'Todos',
@@ -34,7 +35,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: '4 RESISTENCIAS', desc: 'Dos arriba y dos abajo, con luz interior.', iconName: 'flame' },
       { label: 'ACCESORIOS', desc: 'Bandeja esmaltada, rejilla y agarradera.', iconName: 'check-circle' }
     ],
-    image: '/src/assets/images/nuvoh_horno_electrico_1791905594716.jpg',
+    image: ASSET_IMAGES.horno,
     stock: 45,
     featured: true
   },
@@ -58,7 +59,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: '2000 W', desc: 'Temperatura regulable con timer.', iconName: 'zap' },
       { label: 'LUZ INTERIOR', desc: 'Mirás sin abrir la puerta.', iconName: 'sun' }
     ],
-    image: '/src/assets/images/nuvoh_horno_electrico_1791905594716.jpg',
+    image: ASSET_IMAGES.horno,
     stock: 28,
     featured: true
   },
@@ -83,7 +84,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'TURBO CONVECCIÓN', desc: 'Ventilador que circula el aire caliente.', iconName: 'wind' },
       { label: 'INTERIOR ANTIADHERENTE', desc: 'Con lámpara, bandeja, rejilla y mango.', iconName: 'shield' }
     ],
-    image: '/src/assets/images/nuvoh_horno_electrico_1791905594716.jpg',
+    image: ASSET_IMAGES.horno,
     stock: 35
   },
   {
@@ -107,7 +108,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'VAPORIZADOR', desc: 'Latte y capuchino con espuma en casa.', iconName: 'cloud' },
       { label: 'TANQUE 1,2 L', desc: 'Removible, filtro de 1 o 2 pocillos.', iconName: 'droplet' }
     ],
-    image: '/src/assets/images/nuvoh_cafetera_expresso_1791905596557.jpg',
+    image: ASSET_IMAGES.cafetera,
     stock: 22,
     featured: true
   },
@@ -131,7 +132,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'MANTIENE CALOR', desc: 'Conserva la temperatura elegida.', iconName: 'flame' },
       { label: 'BASE 360°', desc: 'Con corte automático de seguridad.', iconName: 'rotate-cw' }
     ],
-    image: '/src/assets/images/nuvoh_cafetera_expresso_1791905596557.jpg',
+    image: ASSET_IMAGES.cafetera,
     stock: 60,
     isNew: true
   },
@@ -156,7 +157,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: '80 A 200 °C', desc: 'Timer digital de 60 minutos.', iconName: 'clock' },
       { label: 'ANTIADHERENTE', desc: 'Cesta extraíble fácil de lavar.', iconName: 'sparkles' }
     ],
-    image: '/src/assets/images/nuvoh_horno_electrico_1791905594716.jpg',
+    image: ASSET_IMAGES.horno,
     stock: 40
   },
   {
@@ -179,7 +180,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'ACERO INOXIDABLE', desc: 'Mesada de vidrio templado reforzado.', iconName: 'shield' },
       { label: 'VÁLVULA SEGURIDAD', desc: 'De corte total y multigas homologado.', iconName: 'check' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 12
   },
 
@@ -204,7 +205,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'POTENCIA', desc: 'Por niveles, según cuántas velas prendés.', iconName: 'sliders' },
       { label: 'SEGURA', desc: 'Corte automático por caída y fusible térmico.', iconName: 'shield' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 90
   },
   {
@@ -228,7 +229,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'LIVIANO', desc: '60 x 35 x 10 cm, patas y fácil de mover.', iconName: 'box' },
       { label: 'SEGURO', desc: 'Materiales ignífugos de alto rendimiento.', iconName: 'shield' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 55,
     featured: true
   },
@@ -253,7 +254,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: '16 PROGRAMAS', desc: 'Rápido 15m, lana, alergias, sábanas.', iconName: 'list' },
       { label: 'PANTALLA DIGITAL', desc: 'Control de temperatura fría y caliente.', iconName: 'monitor' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 14
   },
   {
@@ -277,7 +278,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'FILTRO HEPA', desc: 'Retiene ácaros y polen con sensor anticaída.', iconName: 'shield' },
       { label: '11.800 RPM', desc: 'Batería de 2000 mAh de larga duración.', iconName: 'battery' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 30,
     featured: true
   },
@@ -302,7 +303,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'HUMIDIFICA', desc: 'Mejora el aire seco en habitaciones y oficinas.', iconName: 'wind' },
       { label: 'CONEXIÓN USB', desc: 'Se conecta a cualquier cargador o computadora.', iconName: 'cpu' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 85
   },
 
@@ -327,7 +328,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'KIT DE MANO', desc: 'Arco de sierra, pinzas, destornilladores y cutter.', iconName: 'briefcase' },
       { label: 'TODO ORDENADO', desc: 'Mechas, tubos, tester, cinta de 3m y tarugos.', iconName: 'check-square' }
     ],
-    image: '/src/assets/images/nuvoh_taladro_maletin_1791905596424.jpg',
+    image: ASSET_IMAGES.taladro,
     stock: 50,
     featured: true
   },
@@ -351,7 +352,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'CADENA DE REPUESTO', desc: 'Incluye cadena extra 1/4-043 de 6 pulgadas.', iconName: 'repeat' },
       { label: 'LISTA PARA USAR', desc: 'Cargador rápido y maletín de transporte.', iconName: 'package' }
     ],
-    image: '/src/assets/images/nuvoh_taladro_maletin_1791905596424.jpg',
+    image: ASSET_IMAGES.taladro,
     stock: 40
   },
   {
@@ -374,7 +375,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: '21 PUNTAS', desc: 'Torx, hexagonales, planas y Phillips.', iconName: 'hash' },
       { label: 'CAJA ORDENADA', desc: 'Estuche rígido rojo de alta resistencia.', iconName: 'box' }
     ],
-    image: '/src/assets/images/nuvoh_taladro_maletin_1791905596424.jpg',
+    image: ASSET_IMAGES.taladro,
     stock: 120
   },
   {
@@ -398,7 +399,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'DISCO INCLUIDO', desc: 'Viene con disco de corte de 115 x 1,6 mm.', iconName: 'disc' },
       { label: 'ROSCA M14', desc: 'Compatible con discos y accesorios estándar.', iconName: 'check' }
     ],
-    image: '/src/assets/images/nuvoh_taladro_maletin_1791905596424.jpg',
+    image: ASSET_IMAGES.taladro,
     stock: 65,
     isNew: true
   },
@@ -423,7 +424,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'ACCESORIOS', desc: 'Mechas y cinceles incluidos en el kit.', iconName: 'box' },
       { label: 'MALETÍN', desc: 'Valija rígida para guardar todo en orden.', iconName: 'briefcase' }
     ],
-    image: '/src/assets/images/nuvoh_taladro_maletin_1791905596424.jpg',
+    image: ASSET_IMAGES.taladro,
     stock: 25
   },
 
@@ -449,7 +450,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'GUARDADO OCULTO', desc: 'Debajo de la tapa entran controles y notebooks.', iconName: 'archive' },
       { label: 'MADERA Y METAL', desc: 'Tapa de madera clara con herrajes reforzados.', iconName: 'layers' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 18,
     isNew: true,
     featured: true
@@ -475,7 +476,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'TAPIZADO SUAVE', desc: 'Tela tipo chenille en tono camel cálido.', iconName: 'heart' },
       { label: 'PATAS DE MADERA', desc: 'Cuatro patas de madera clara, prolijas y firmes.', iconName: 'shield' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 30,
     isNew: true
   },
@@ -499,7 +500,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'SE RECLINA', desc: 'Bajás el respaldo para descansar entre partidas.', iconName: 'chevrons-down' },
       { label: 'BASE DE 5 RUEDAS', desc: 'Ruedas giratorias 360° y pistón a gas clase 4.', iconName: 'rotate-cw' }
     ],
-    image: '/src/assets/images/nuvoh_silla_gamer_1791905596483.jpg',
+    image: ASSET_IMAGES.silla,
     stock: 45,
     featured: true
   },
@@ -523,7 +524,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'GANCHO Y VASO', desc: 'Soporte para auriculares y vaso integrados.', iconName: 'headphones' },
       { label: 'BORDE CONTENCIÓN', desc: 'Pasa-cables para que nada se caiga de la mesa.', iconName: 'sliders' }
     ],
-    image: '/src/assets/images/nuvoh_silla_gamer_1791905596483.jpg',
+    image: ASSET_IMAGES.silla,
     stock: 25
   },
 
@@ -549,7 +550,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'TODO EL CUERPO', desc: 'Cuello, espalda, piernas, pies y manos.', iconName: 'user' },
       { label: 'LIVIANO', desc: 'Diseño ergonómico fácil de usar a una mano.', iconName: 'feather' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 50
   },
   {
@@ -573,7 +574,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'PANTALLA TÁCTIL', desc: 'Elegís color y temporizador con un toque.', iconName: 'monitor' },
       { label: 'PLEGABLE', desc: 'Se guarda sin ocupar lugar. Incluye antiparras.', iconName: 'eye' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 16,
     featured: true
   },
@@ -598,7 +599,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'INTENSIDADES', desc: 'Selector de 6 velocidades progresivas.', iconName: 'sliders' },
       { label: 'RECARGABLE USB', desc: 'Batería de larga autonomía sin cables.', iconName: 'battery' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 70
   },
   {
@@ -622,7 +623,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'PANTALLA DIGITAL', desc: 'Mide tiempo, velocidad, distancia y calorías.', iconName: 'monitor' },
       { label: 'PLEGABLE', desc: 'Ruedas de traslado y disco giratorio de cintura.', iconName: 'move' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 20
   },
 
@@ -648,7 +649,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'HDMI Y VGA', desc: 'Doble conectividad compatible con toda PC.', iconName: 'tv' },
       { label: 'SOPORTE VESA', desc: 'Montable en pared o brazo de escritorio.', iconName: 'maximize' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 35,
     featured: true
   },
@@ -672,7 +673,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'ILUMINACIÓN RGB', desc: 'Múltiples patrones y animaciones de color.', iconName: 'sun' },
       { label: 'KEYCAPS BI-COLOR', desc: 'Teclas amarillas y negras en plástico de alta gama.', iconName: 'grid' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 45
   },
   {
@@ -696,7 +697,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'BLUETOOTH, USB, FM', desc: 'Reproduce radio, pendrive y conexión inalámbrica.', iconName: 'radio' },
       { label: 'BATERÍA INTERNA', desc: 'Recargable para transportar a cualquier evento.', iconName: 'battery' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 24,
     featured: true
   },
@@ -720,7 +721,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'AUTONOMÍA 1 AÑO', desc: 'A pilas AAA con puerto de emergencia USB.', iconName: 'battery' },
       { label: 'FÁCIL MONTAJE', desc: 'Se instala directamente en puertas estándar.', iconName: 'tool' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 50,
     isNew: true
   },
@@ -744,7 +745,7 @@ export const INITIAL_PRODUCTS: Product[] = [
       { label: 'DOBLE FRENO', desc: 'Frenado seguro delantero y a disco trasero.', iconName: 'shield' },
       { label: 'PLEGABLE 3 SEG', desc: 'Lo guardás en el baúl del auto o en la oficina.', iconName: 'package' }
     ],
-    image: '/src/assets/images/nuvoh_hero_catalog_1791905594543.jpg',
+    image: ASSET_IMAGES.hero,
     stock: 8,
     featured: true
   }
