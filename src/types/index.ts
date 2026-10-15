@@ -10,13 +10,53 @@ export interface Product {
   galleryUrls?: string[];
   stock: number;
   supplierUrl?: string;
+  supplierName?: string;
   supplierSku?: string;
+  lastCostSyncAt?: string;
+  isSuperOffer?: boolean;
+  superOfferDiscountLabel?: string;
+  catalogPageSource?: number;
   inStock: boolean;
   featured?: boolean;
   rating?: number;
   reviewsCount?: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface SuperOfferDeal {
+  id: string;
+  title: string;
+  description: string;
+  originalPrice: number;    // Precio de costo del catálogo
+  markupPercentage: number; // Margen de ganancia aplicado (ej 40%)
+  finalPrice: number;       // Precio de venta calculado con ganancia
+  regularPrice?: number;    // Precio anterior tachado de referencia
+  category: string;
+  imageUrl: string;
+  galleryUrls?: string[];
+  stock: number;
+  pageNumber?: number;      // Página o imagen de donde se extrajo
+  supplierUrl?: string;     // Link directo de proveedor (ej Inova)
+  supplierName?: string;
+  supplierSku?: string;
+  discountLabel?: string;   // Ej: "35% OFF", "OFERTA FLASH", "SUPER OFERTA"
+  inStock: boolean;
+  selected?: boolean;       // Seleccionado para importar / publicar
+  isSyncedToInventory?: boolean;
+  inventoryProductId?: string;
+}
+
+export interface SuperOfferCatalog {
+  id: string;
+  title: string;
+  description?: string;
+  sourceType: 'pdf' | 'images' | 'inova' | 'manual';
+  fileName?: string;
+  filePagesCount?: number;
+  createdAt: string;
+  defaultMarkup: number;
+  items: SuperOfferDeal[];
 }
 
 export interface OrderItem {

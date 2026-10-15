@@ -31,8 +31,11 @@ import {
   EyeOff,
   X,
   Lock,
-  Key
+  Key,
+  Flame,
+  FileText
 } from 'lucide-react';
+import { SuperOfertasModule } from './SuperOfertasModule';
 
 interface AdminPanelProps {
   onClose: () => void;
@@ -47,6 +50,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
     addMultipleProducts,
     updateProduct,
     deleteProduct,
+    deleteMultipleProducts,
     updateStock,
     updateGlobalMarkup,
     saveSettings,
@@ -55,12 +59,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
     resetToInitialCatalog,
     verifyAndSendBudget,
     markOrderAsPaid,
-    generateMercadoPagoLink
+    generateMercadoPagoLink,
+    syncProductCostFromLink,
+    syncAllProductCostsFromLinks
   } = useStore();
 
   const { adminEmail, changeAdminPassword, changeAdminEmail } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'settings'>('orders');
+  const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'settings' | 'super_ofertas'>('super_ofertas');
   const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'company' | 'payments'>('password');
 
   // --- PASSWORD MANAGEMENT STATE ---
@@ -105,6 +111,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
   const [globalMarkupInput, setGlobalMarkupInput] = useState<number>(settings.defaultProfitMargin || 40);
   const [isApplyingGlobalMarkup, setIsApplyingGlobalMarkup] = useState(false);
 
+  // Deletion modal states
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [isDeletingSingle, setIsDeletingSingle] = useState(false);
+  const [selectedInventoryIds, setSelectedInventoryIds] = useState<string[]>([]);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [inventoryNotification, setInventoryNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // Cost Synchronization State
+  const [isSyncingAllCosts, setIsSyncingAllCosts] = useState(false);
+  const [syncingSingleId, setSyncingSingleId] = useState<string | null>(null);
+  const [syncSummaryModal, setSyncSummaryModal] = useState<{
+    total: number;
+    updated: number;
+    unchanged: number;
+    failed: number;
+    results: any[];
+  } | null>(null);
+  const [isSyncingInEditModal, setIsSyncingInEditModal] = useState(false);
+  const [isSyncingInNewModal, setIsSyncingInNewModal] = useState(false);
+
   // New product form
   const [newProduct, setNewProduct] = useState({
     title: '',
@@ -116,6 +143,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
     imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
     stock: 20,
     supplierUrl: '',
+    supplierName: 'Inova ARG',
     inStock: true,
     featured: false
   });
@@ -210,7 +238,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
   const handleImportSelected = async () => {
     const itemsToImport = scrapedItems.filter((i) => selectedScrapedIds.includes(i.id));
     if (itemsToImport.length === 0) {
-      alert('Por favor selecciona al menos un producto marcando su casilla.');
+      setScrapeError('Por favor selecciona al menos un producto marcando su casilla.');
       return;
     }
 
@@ -223,7 +251,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
         `¡Éxito! Se cargaron ${count} producto(s) a la Tienda Pública y a tu Inventario en tiempo real.`
       );
     } catch (err: any) {
-      alert('Error al importar productos: ' + err.message);
+      setScrapeError('Error al importar productos: ' + err.message);
     } finally {
       setIsImporting(false);
     }
@@ -232,48 +260,252 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
   // --- INVENTORY LOGIC ---
   const handleApplyGlobalMarkup = async () => {
     if (isNaN(globalMarkupInput) || globalMarkupInput < 0) {
-      alert('Ingresa un porcentaje de ganancia válido');
+      setInventoryNotification({
+        type: 'error',
+        message: 'Ingresa un porcentaje de ganancia válido'
+      });
       return;
     }
 
     setIsApplyingGlobalMarkup(true);
     try {
       await updateGlobalMarkup(globalMarkupInput);
-      alert(`¡Margen del +${globalMarkupInput}% aplicado a todos los productos con éxito!`);
+      setInventoryNotification({
+        type: 'success',
+        message: `¡Margen del +${globalMarkupInput}% aplicado a todos los productos con éxito!`
+      });
+      setTimeout(() => setInventoryNotification(null), 4000);
     } catch (err: any) {
-      alert('Error al actualizar márgenes: ' + err.message);
+      setInventoryNotification({
+        type: 'error',
+        message: 'Error al actualizar márgenes: ' + err.message
+      });
     } finally {
       setIsApplyingGlobalMarkup(false);
+    }
+  };
+
+  // Sincronizar costo de un solo producto según su enlace
+  const handleSyncSingleProductCost = async (product: Product) => {
+    if (!product.supplierUrl || !product.supplierUrl.trim().startsWith('http')) {
+      setInventoryNotification({
+        type: 'error',
+        message: `El producto "${product.title}" no posee un enlace de proveedor asignado.`
+      });
+      return;
+    }
+
+    setSyncingSingleId(product.id);
+    try {
+      const res = await syncProductCostFromLink(product.id);
+      if (res.priceChanged) {
+        confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
+        setInventoryNotification({
+          type: 'success',
+          message: `¡Costo actualizado según enlace! "${product.title}": ${formatCurrency(res.oldCost)} ➔ ${formatCurrency(res.newCost)} (Nuevo P. Venta: ${formatCurrency(res.newFinalPrice)})`
+        });
+      } else {
+        setInventoryNotification({
+          type: 'success',
+          message: `El costo de "${product.title}" está al día con el proveedor (${formatCurrency(res.newCost)}).`
+        });
+      }
+      setTimeout(() => setInventoryNotification(null), 5000);
+    } catch (err: any) {
+      setInventoryNotification({
+        type: 'error',
+        message: `Error al actualizar costo de "${product.title}": ${err.message}`
+      });
+    } finally {
+      setSyncingSingleId(null);
+    }
+  };
+
+  // Sincronizar todos los productos que tienen enlace en lote
+  const handleSyncAllCosts = async () => {
+    const linked = products.filter(
+      (p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http')
+    );
+
+    if (linked.length === 0) {
+      setInventoryNotification({
+        type: 'error',
+        message: 'No hay productos con enlace de proveedor cargado en inventario.'
+      });
+      return;
+    }
+
+    setIsSyncingAllCosts(true);
+    try {
+      const res = await syncAllProductCostsFromLinks();
+      setSyncSummaryModal(res);
+      if (res.updated > 0) {
+        confetti({ particleCount: 70, spread: 80, origin: { y: 0.5 } });
+        setInventoryNotification({
+          type: 'success',
+          message: `¡Sincronización completada! ${res.updated} de ${res.total} productos actualizaron su costo según su enlace.`
+        });
+      } else {
+        setInventoryNotification({
+          type: 'success',
+          message: `Sincronización completada. Todos los productos (${res.unchanged}) están al día con sus proveedores.`
+        });
+      }
+      setTimeout(() => setInventoryNotification(null), 6000);
+    } catch (err: any) {
+      setInventoryNotification({
+        type: 'error',
+        message: 'Error al sincronizar costos masivos: ' + err.message
+      });
+    } finally {
+      setIsSyncingAllCosts(false);
+    }
+  };
+
+  // Sincronizar costo en vivo dentro del modal de edición
+  const handleSyncCostInEditModal = async () => {
+    if (!editingProduct || !editingProduct.supplierUrl || !editingProduct.supplierUrl.trim().startsWith('http')) {
+      setInventoryNotification({
+        type: 'error',
+        message: 'Por favor ingresa un enlace de proveedor válido (https://...) antes de sincronizar.'
+      });
+      return;
+    }
+
+    setIsSyncingInEditModal(true);
+    try {
+      const res = await fetch('/api/sync-product-cost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: editingProduct.supplierUrl.trim(),
+          markupPercentage: editingProduct.markupPercentage || 40,
+          currentOriginalPrice: editingProduct.originalPrice
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'No se pudo leer el costo desde el enlace.');
+      }
+
+      setEditingProduct({
+        ...editingProduct,
+        originalPrice: data.originalPrice,
+        finalPrice: data.finalPrice,
+        supplierName: data.supplierName || editingProduct.supplierName
+      });
+
+      setInventoryNotification({
+        type: 'success',
+        message: `¡Costo extraído del enlace! Proveedor: ${data.supplierName} | Costo: ${formatCurrency(data.originalPrice)} | P. Venta: ${formatCurrency(data.finalPrice)}`
+      });
+      setTimeout(() => setInventoryNotification(null), 4000);
+    } catch (err: any) {
+      setInventoryNotification({
+        type: 'error',
+        message: 'Error al consultar costo del enlace: ' + err.message
+      });
+    } finally {
+      setIsSyncingInEditModal(false);
+    }
+  };
+
+  // Sincronizar costo en vivo dentro del modal de nuevo producto
+  const handleSyncCostInNewModal = async () => {
+    if (!newProduct.supplierUrl || !newProduct.supplierUrl.trim().startsWith('http')) {
+      setInventoryNotification({
+        type: 'error',
+        message: 'Por favor ingresa un enlace de proveedor válido (https://...) para extraer el costo.'
+      });
+      return;
+    }
+
+    setIsSyncingInNewModal(true);
+    try {
+      const res = await fetch('/api/sync-product-cost', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: newProduct.supplierUrl.trim(),
+          markupPercentage: newProduct.markupPercentage || 40,
+          currentOriginalPrice: newProduct.originalPrice
+        })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'No se pudo leer el costo desde el enlace.');
+      }
+
+      setNewProduct((prev) => ({
+        ...prev,
+        originalPrice: data.originalPrice,
+        finalPrice: data.finalPrice,
+        supplierName: data.supplierName || prev.supplierName,
+        title: prev.title.trim() ? prev.title : (data.title || prev.title)
+      }));
+
+      setInventoryNotification({
+        type: 'success',
+        message: `¡Costo obtenido exitosamente! Proveedor: ${data.supplierName} | Costo mayorista: ${formatCurrency(data.originalPrice)}`
+      });
+      setTimeout(() => setInventoryNotification(null), 4000);
+    } catch (err: any) {
+      setInventoryNotification({
+        type: 'error',
+        message: 'Error al consultar costo del enlace: ' + err.message
+      });
+    } finally {
+      setIsSyncingInNewModal(false);
     }
   };
 
   const handleSaveProductEdit = async () => {
     if (!editingProduct) return;
     try {
-      const finalPrice = Math.round(editingProduct.originalPrice * (1 + editingProduct.markupPercentage / 100));
+      const finalPrice = Math.round(
+        editingProduct.originalPrice * (1 + editingProduct.markupPercentage / 100)
+      );
       await updateProduct(editingProduct.id, {
         ...editingProduct,
         finalPrice
       });
+      setInventoryNotification({
+        type: 'success',
+        message: `Producto "${editingProduct.title}" actualizado con éxito.`
+      });
+      setTimeout(() => setInventoryNotification(null), 3000);
       setEditingProduct(null);
     } catch (e: any) {
-      alert('Error al guardar producto: ' + e.message);
+      setInventoryNotification({
+        type: 'error',
+        message: 'Error al guardar producto: ' + e.message
+      });
     }
   };
 
   const handleCreateNewProduct = async () => {
     if (!newProduct.title.trim() || !newProduct.imageUrl.trim()) {
-      alert('Por favor ingresa un título e imagen.');
+      setInventoryNotification({
+        type: 'error',
+        message: 'Por favor ingresa un título e imagen para el producto.'
+      });
       return;
     }
 
-    const finalPrice = Math.round(newProduct.originalPrice * (1 + newProduct.markupPercentage / 100));
+    const finalPrice = Math.round(
+      newProduct.originalPrice * (1 + newProduct.markupPercentage / 100)
+    );
     try {
       await addProduct({
         ...newProduct,
         finalPrice
       });
       setIsNewProductModalOpen(false);
+      setInventoryNotification({
+        type: 'success',
+        message: `Nuevo producto "${newProduct.title}" agregado al catálogo con éxito.`
+      });
+      setTimeout(() => setInventoryNotification(null), 3000);
       setNewProduct({
         title: '',
         description: '',
@@ -284,11 +516,61 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
         imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
         stock: 20,
         supplierUrl: '',
+        supplierName: 'Inova ARG',
         inStock: true,
         featured: false
       });
     } catch (e: any) {
-      alert('Error al crear producto: ' + e.message);
+      setInventoryNotification({
+        type: 'error',
+        message: 'Error al crear producto: ' + e.message
+      });
+    }
+  };
+
+  const handleConfirmDeleteSingle = async () => {
+    if (!productToDelete) return;
+    setIsDeletingSingle(true);
+    const prodTitle = productToDelete.title;
+    try {
+      await deleteProduct(productToDelete.id);
+      setSelectedInventoryIds((prev) => prev.filter((id) => id !== productToDelete.id));
+      setInventoryNotification({
+        type: 'success',
+        message: `Producto "${prodTitle}" eliminado correctamente del inventario y la tienda.`
+      });
+      setTimeout(() => setInventoryNotification(null), 4000);
+      setProductToDelete(null);
+    } catch (e: any) {
+      setInventoryNotification({
+        type: 'error',
+        message: 'Error al eliminar producto: ' + (e?.message || 'Error desconocido')
+      });
+    } finally {
+      setIsDeletingSingle(false);
+    }
+  };
+
+  const handleConfirmDeleteBatch = async () => {
+    if (selectedInventoryIds.length === 0) return;
+    setIsDeletingBatch(true);
+    const count = selectedInventoryIds.length;
+    try {
+      await deleteMultipleProducts(selectedInventoryIds);
+      setSelectedInventoryIds([]);
+      setShowBulkDeleteConfirm(false);
+      setInventoryNotification({
+        type: 'success',
+        message: `Se eliminaron ${count} productos correctamente del inventario y la tienda.`
+      });
+      setTimeout(() => setInventoryNotification(null), 4000);
+    } catch (e: any) {
+      setInventoryNotification({
+        type: 'error',
+        message: 'Error al eliminar productos seleccionados: ' + (e?.message || 'Error desconocido')
+      });
+    } finally {
+      setIsDeletingBatch(false);
     }
   };
 
@@ -413,6 +695,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
         {/* Tab Navigation */}
         <div className="max-w-7xl mx-auto flex items-center gap-1 sm:gap-2 mt-4 border-t border-slate-800/80 pt-2 overflow-x-auto no-scrollbar">
+          <button
+            onClick={() => setActiveTab('super_ofertas')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'super_ofertas'
+                ? 'bg-gradient-to-r from-rose-600 via-rose-500 to-amber-600 text-white shadow-lg shadow-rose-600/30 ring-1 ring-rose-400'
+                : 'text-rose-300 bg-rose-950/40 border border-rose-900/50 hover:bg-rose-900/60 hover:text-white'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-amber-300 fill-amber-300 animate-pulse" />
+            <span>🔥 Súper Ofertas & Catálogos</span>
+          </button>
+
           <button
             onClick={() => setActiveTab('scraper')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
@@ -591,6 +885,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* Quick Cost Sync Banner for Existing Inventory */}
+            <div className="bg-gradient-to-r from-slate-950 via-indigo-950/40 to-slate-950 p-5 rounded-3xl border border-indigo-900/40 shadow-xl flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-2xl border border-emerald-500/30 shrink-0">
+                  <RefreshCw className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-black text-white">
+                      Actualizador de Costos según Enlaces de Proveedores
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black">
+                      {products.filter((p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http')).length} con link
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    ¿Inova ARG u otros proveedores actualizaron precios? Consulta automáticamente los costos vigentes de todos tus productos y recalcula tus precios de venta sin perder tu margen.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto">
+                <button
+                  type="button"
+                  onClick={handleSyncAllCosts}
+                  disabled={isSyncingAllCosts}
+                  className="w-full md:w-auto px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 text-white text-xs font-black rounded-xl shadow-lg shadow-emerald-950/40 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <RefreshCw className={`w-4 h-4 ${isSyncingAllCosts ? 'animate-spin text-emerald-200' : ''}`} />
+                  <span>{isSyncingAllCosts ? 'Actualizando Costos...' : 'Actualizar Todos los Costos Ahora'}</span>
+                </button>
+              </div>
             </div>
 
             {/* Extracted Items Review Grid */}
@@ -873,6 +1201,62 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
             {/* Inventory Controls & Table */}
             <div className="bg-slate-950 p-5 rounded-3xl border border-slate-800 shadow-xl space-y-4">
+              {/* Notification banner */}
+              {inventoryNotification && (
+                <div
+                  className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center justify-between gap-3 animate-fade-in ${
+                    inventoryNotification.type === 'success'
+                      ? 'bg-emerald-950/80 border-emerald-800 text-emerald-300'
+                      : 'bg-rose-950/80 border-rose-800 text-rose-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {inventoryNotification.type === 'success' ? (
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    )}
+                    <span>{inventoryNotification.message}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setInventoryNotification(null)}
+                    className="text-slate-400 hover:text-white p-1 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Bulk Deletion Bar */}
+              {selectedInventoryIds.length > 0 && (
+                <div className="p-3 bg-rose-950/40 border border-rose-800/80 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
+                  <span className="text-xs text-rose-200 font-bold flex items-center gap-2">
+                    <Trash2 className="w-4 h-4 text-rose-400" />
+                    <span>
+                      <strong className="text-white">{selectedInventoryIds.length}</strong> productos seleccionados para eliminar
+                    </span>
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedInventoryIds([])}
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 cursor-pointer"
+                    >
+                      Deseleccionar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkDeleteConfirm(true)}
+                      className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-black rounded-xl shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Eliminar Seleccionados ({selectedInventoryIds.length})</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3 flex-1 max-w-md">
                   <div className="relative w-full">
@@ -887,7 +1271,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSyncAllCosts}
+                    disabled={isSyncingAllCosts}
+                    className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 text-white text-xs font-black rounded-xl transition-all shadow-md shadow-emerald-950/40 flex items-center gap-1.5 cursor-pointer"
+                    title="Actualizar y sincronizar costos de compra de todos los productos conectados con link (Inova ARG, etc.)"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAllCosts ? 'animate-spin text-emerald-200' : ''}`} />
+                    <span>{isSyncingAllCosts ? 'Sincronizando Costos...' : 'Actualizar Costos según Enlaces'}</span>
+                    <span className="px-1.5 py-0.5 bg-emerald-950/60 border border-emerald-400/40 text-[10px] font-black rounded-md">
+                      {products.filter((p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http')).length}
+                    </span>
+                  </button>
                   <button
                     onClick={() => setIsNewProductModalOpen(true)}
                     className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
@@ -897,7 +1294,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                   </button>
                   <button
                     onClick={resetToInitialCatalog}
-                    className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-semibold rounded-xl border border-slate-800 transition-colors"
+                    className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white text-xs font-semibold rounded-xl border border-slate-800 transition-colors cursor-pointer"
                     title="Restablecer catálogo base"
                   >
                     Recargar Catálogo
@@ -910,7 +1307,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                 <table className="w-full text-left text-xs text-slate-300">
                   <thead className="bg-slate-900 text-slate-400 uppercase text-[10px] tracking-wider font-bold border-b border-slate-800">
                     <tr>
+                      <th className="py-3 px-3 w-8 text-center">
+                        <input
+                          type="checkbox"
+                          checked={
+                            filteredProducts.length > 0 &&
+                            selectedInventoryIds.length === filteredProducts.length
+                          }
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedInventoryIds(filteredProducts.map((p) => p.id));
+                            } else {
+                              setSelectedInventoryIds([]);
+                            }
+                          }}
+                          className="w-4 h-4 rounded text-indigo-600 bg-slate-800 border-slate-700 cursor-pointer"
+                          title="Seleccionar todos para eliminar"
+                        />
+                      </th>
                       <th className="py-3 px-4">Producto</th>
+                      <th className="py-3 px-3">Proveedor / Compra</th>
                       <th className="py-3 px-3">Categoría</th>
                       <th className="py-3 px-3">Costo Prov.</th>
                       <th className="py-3 px-3">Margen</th>
@@ -920,78 +1336,267 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-medium">
-                    {filteredProducts.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-900/40 transition-colors">
-                        <td className="py-3 px-4 flex items-center gap-3">
-                          <img
-                            src={p.imageUrl}
-                            alt={p.title}
-                            className="w-10 h-10 object-cover rounded-lg bg-slate-800 shrink-0 border border-slate-700"
-                          />
-                          <div className="min-w-0 max-w-xs">
-                            <span className="font-bold text-white block truncate">{p.title}</span>
-                            <span className="text-[10px] text-slate-400">ID: {p.id.slice(-8)}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 text-slate-400">{p.category}</td>
-                        <td className="py-3 px-3 font-mono text-slate-300">
-                          {formatCurrency(p.originalPrice || Math.round(p.finalPrice / 1.4))}
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="bg-amber-400/10 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-400/20">
-                            +{p.markupPercentage || 40}%
-                          </span>
-                        </td>
-                        <td className="py-3 px-3 font-mono font-black text-emerald-400 text-sm">
-                          {formatCurrency(p.finalPrice)}
-                        </td>
-                        <td className="py-3 px-3 text-center">
-                          <div className="inline-flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-lg border border-slate-800">
-                            <button
-                              onClick={() => updateStock(p.id, Math.max(0, p.stock - 1))}
-                              className="text-slate-400 hover:text-white font-black px-1"
-                            >
-                              -
-                            </button>
-                            <span className={`font-bold ${p.stock <= 5 ? 'text-rose-400' : 'text-white'}`}>
-                              {p.stock}
-                            </span>
-                            <button
-                              onClick={() => updateStock(p.id, p.stock + 1)}
-                              className="text-slate-400 hover:text-white font-black px-1"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <div className="inline-flex items-center gap-1">
-                            <button
-                              onClick={() => setEditingProduct(p)}
-                              className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors"
-                              title="Editar producto"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm(`¿Eliminar ${p.title} del catálogo?`)) {
-                                  deleteProduct(p.id);
-                                }
-                              }}
-                              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition-colors"
-                              title="Eliminar producto"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                    {filteredProducts.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center text-slate-500">
+                          <PackageCheck className="w-10 h-10 mx-auto mb-2 text-slate-600 opacity-60" />
+                          <p className="font-bold text-slate-400">No hay productos en inventario.</p>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            Puedes extraerlos desde el Extractor Web, agregarlos manualmente o recargar el catálogo base.
+                          </p>
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredProducts.map((p) => {
+                        const isSelected = selectedInventoryIds.includes(p.id);
+                        return (
+                          <tr
+                            key={p.id}
+                            className={`transition-colors ${
+                              isSelected ? 'bg-indigo-950/30' : 'hover:bg-slate-900/40'
+                            }`}
+                          >
+                            <td className="py-3 px-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedInventoryIds((prev) => [...prev, p.id]);
+                                  } else {
+                                    setSelectedInventoryIds((prev) => prev.filter((id) => id !== p.id));
+                                  }
+                                }}
+                                className="w-4 h-4 rounded text-indigo-600 bg-slate-800 border-slate-700 cursor-pointer"
+                              />
+                            </td>
+                            <td className="py-3 px-4 flex items-center gap-3">
+                              <img
+                                src={p.imageUrl}
+                                alt={p.title}
+                                className="w-10 h-10 object-cover rounded-lg bg-slate-800 shrink-0 border border-slate-700"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src =
+                                    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+                                }}
+                              />
+                              <div className="min-w-0 max-w-xs">
+                                <span className="font-bold text-white block truncate">{p.title}</span>
+                                <span className="text-[10px] text-slate-400">ID: {p.id.slice(-8)}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3">
+                              <div className="flex flex-col gap-0.5 max-w-[160px]">
+                                <span className="font-bold text-amber-300 text-xs truncate flex items-center gap-1">
+                                  <span>📦</span>
+                                  <span>{p.supplierName || (p.supplierUrl?.includes('inova') ? 'Inova ARG' : 'Proveedor Web')}</span>
+                                </span>
+                                {p.supplierUrl ? (
+                                  <a
+                                    href={p.supplierUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] text-indigo-400 hover:text-indigo-300 font-semibold underline truncate"
+                                    title="Enlace para comprar en el proveedor"
+                                  >
+                                    <ExternalLink className="w-3 h-3 shrink-0" />
+                                    <span>Dónde Comprar</span>
+                                  </a>
+                                ) : (
+                                  <span className="text-[10px] text-slate-500">Carga directa</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-slate-400">{p.category}</td>
+                            <td className="py-3 px-3">
+                              <div className="flex flex-col">
+                                <span className="font-mono text-slate-200 font-bold">
+                                  {formatCurrency(p.originalPrice || Math.round(p.finalPrice / 1.4))}
+                                </span>
+                                {p.lastCostSyncAt ? (
+                                  <span
+                                    className="text-[9px] text-emerald-400 font-bold flex items-center gap-0.5 mt-0.5"
+                                    title={`Última actualización de costo: ${new Date(p.lastCostSyncAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`}
+                                  >
+                                    <Check className="w-2.5 h-2.5 shrink-0" /> Sincronizado
+                                  </span>
+                                ) : p.supplierUrl ? (
+                                  <span className="text-[9px] text-slate-500">Con enlace</span>
+                                ) : null}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3">
+                              <span className="bg-amber-400/10 text-amber-300 font-bold px-2 py-0.5 rounded border border-amber-400/20">
+                                +{p.markupPercentage || 40}%
+                              </span>
+                            </td>
+                            <td className="py-3 px-3 font-mono font-black text-emerald-400 text-sm">
+                              {formatCurrency(p.finalPrice)}
+                            </td>
+                            <td className="py-3 px-3 text-center">
+                              <div className="inline-flex items-center gap-1.5 bg-slate-900 px-2 py-1 rounded-lg border border-slate-800">
+                                <button
+                                  type="button"
+                                  onClick={() => updateStock(p.id, Math.max(0, p.stock - 1))}
+                                  className="text-slate-400 hover:text-white font-black px-1 cursor-pointer"
+                                >
+                                  -
+                                </button>
+                                <span className={`font-bold ${p.stock <= 5 ? 'text-rose-400' : 'text-white'}`}>
+                                  {p.stock}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => updateStock(p.id, p.stock + 1)}
+                                  className="text-slate-400 hover:text-white font-black px-1 cursor-pointer"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <div className="inline-flex items-center gap-1">
+                                {p.supplierUrl && p.supplierUrl.trim().startsWith('http') && (
+                                  <button
+                                    type="button"
+                                    disabled={syncingSingleId === p.id}
+                                    onClick={() => handleSyncSingleProductCost(p)}
+                                    className="p-1.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/60 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                                    title="Actualizar costo desde el enlace del proveedor"
+                                  >
+                                    <RefreshCw className={`w-3.5 h-3.5 ${syncingSingleId === p.id ? 'animate-spin text-emerald-300' : ''}`} />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingProduct(p)}
+                                  className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                                  title="Editar producto"
+                                >
+                                  <Edit className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setProductToDelete(p)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-950/60 rounded-lg transition-colors cursor-pointer"
+                                  title="Eliminar este artículo del catálogo"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
+
+            {/* Modal: Confirm Deletion of Single Product */}
+            {productToDelete && (
+              <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-rose-500/20 text-rose-400 rounded-2xl border border-rose-500/30">
+                      <Trash2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-white text-base">¿Eliminar Producto del Catálogo?</h3>
+                      <p className="text-xs text-slate-400">Esta acción quitará el artículo de la tienda y del inventario de inmediato.</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 flex items-center gap-3">
+                    <img
+                      src={productToDelete.imageUrl}
+                      alt={productToDelete.title}
+                      className="w-14 h-14 object-cover rounded-xl bg-slate-800 shrink-0 border border-slate-700"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-bold text-white text-xs truncate">{productToDelete.title}</h4>
+                      <p className="text-[11px] text-slate-400">
+                        {productToDelete.category} | Costo: <span className="font-mono text-slate-300">{formatCurrency(productToDelete.originalPrice)}</span>
+                      </p>
+                      <p className="text-xs font-mono font-black text-emerald-400">
+                        Venta: {formatCurrency(productToDelete.finalPrice)}
+                      </p>
+                      {productToDelete.supplierName && (
+                        <p className="text-[10px] text-amber-300 font-medium truncate">
+                          Proveedor: {productToDelete.supplierName}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      disabled={isDeletingSingle}
+                      onClick={() => setProductToDelete(null)}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDeletingSingle}
+                      onClick={handleConfirmDeleteSingle}
+                      className="px-5 py-2 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 text-white text-xs font-black rounded-xl shadow-lg shadow-rose-900/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {isDeletingSingle ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                      <span>Sí, Eliminar Producto</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal: Confirm Bulk Deletion */}
+            {showBulkDeleteConfirm && (
+              <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+                  <div className="flex items-center gap-3">
+                    <div className="p-3 bg-rose-500/20 text-rose-400 rounded-2xl border border-rose-500/30">
+                      <Trash2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-white text-base">¿Eliminar {selectedInventoryIds.length} Productos?</h3>
+                      <p className="text-xs text-slate-400">Se eliminarán todos los artículos seleccionados del inventario y la tienda.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      disabled={isDeletingBatch}
+                      onClick={() => setShowBulkDeleteConfirm(false)}
+                      className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDeletingBatch}
+                      onClick={handleConfirmDeleteBatch}
+                      className="px-5 py-2 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 text-white text-xs font-black rounded-xl shadow-lg shadow-rose-900/30 transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {isDeletingBatch ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                      <span>Sí, Eliminar {selectedInventoryIds.length} Productos</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Edit Product Modal */}
             {editingProduct && (
@@ -1000,13 +1605,60 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                   <h3 className="font-extrabold text-white text-base">Editar Producto</h3>
 
                   <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">Título</label>
+                    <label className="text-[11px] text-slate-400 block mb-1">Título del Producto (Visible en tienda)</label>
                     <input
                       type="text"
                       value={editingProduct.title}
                       onChange={(e) => setEditingProduct({ ...editingProduct, title: e.target.value })}
                       className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
                     />
+                  </div>
+
+                  {/* Private supplier origin & source URL */}
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase text-amber-300 tracking-wider block">
+                        🔒 Datos del Proveedor (Privado - Solo para Inventario)
+                      </span>
+                      {editingProduct.supplierUrl && editingProduct.supplierUrl.trim().startsWith('http') && (
+                        <button
+                          type="button"
+                          disabled={isSyncingInEditModal}
+                          onClick={handleSyncCostInEditModal}
+                          className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          title="Consultar costo actual en vivo desde este link"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isSyncingInEditModal ? 'animate-spin' : ''}`} />
+                          <span>{isSyncingInEditModal ? 'Consultando costo...' : '⚡ Actualizar Costo desde Enlace'}</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] text-slate-400 block mb-1">Proveedor / Origen</label>
+                        <input
+                          type="text"
+                          placeholder="Ej. Inova ARG"
+                          value={editingProduct.supplierName || ''}
+                          onChange={(e) =>
+                            setEditingProduct({ ...editingProduct, supplierName: e.target.value })
+                          }
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-400 block mb-1">Enlace Dónde Comprar</label>
+                        <input
+                          type="text"
+                          placeholder="https://..."
+                          value={editingProduct.supplierUrl || ''}
+                          onChange={(e) =>
+                            setEditingProduct({ ...editingProduct, supplierUrl: e.target.value })
+                          }
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -1082,14 +1734,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
                   <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
                     <button
+                      type="button"
                       onClick={() => setEditingProduct(null)}
-                      className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl"
+                      className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl cursor-pointer"
                     >
                       Cancelar
                     </button>
                     <button
+                      type="button"
                       onClick={handleSaveProductEdit}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl cursor-pointer"
                     >
                       Guardar Cambios
                     </button>
@@ -1105,7 +1759,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                   <h3 className="font-extrabold text-white text-base">Nuevo Producto Manual</h3>
 
                   <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">Título del Producto *</label>
+                    <label className="text-[11px] text-slate-400 block mb-1">Título del Producto (Visible en tienda) *</label>
                     <input
                       type="text"
                       required
@@ -1114,6 +1768,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                       onChange={(e) => setNewProduct({ ...newProduct, title: e.target.value })}
                       className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
                     />
+                  </div>
+
+                  {/* Private supplier origin & source URL */}
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase text-amber-300 tracking-wider block">
+                        🔒 Datos del Proveedor (Privado - Solo para Inventario)
+                      </span>
+                      {newProduct.supplierUrl && newProduct.supplierUrl.trim().startsWith('http') && (
+                        <button
+                          type="button"
+                          disabled={isSyncingInNewModal}
+                          onClick={handleSyncCostInNewModal}
+                          className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                          title="Cargar costo mayorista desde el enlace"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${isSyncingInNewModal ? 'animate-spin' : ''}`} />
+                          <span>{isSyncingInNewModal ? 'Cargando datos...' : '⚡ Cargar Costo desde Enlace'}</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] text-slate-400 block mb-1">Proveedor / Origen</label>
+                        <input
+                          type="text"
+                          placeholder="Ej. Inova ARG"
+                          value={newProduct.supplierName || ''}
+                          onChange={(e) => setNewProduct({ ...newProduct, supplierName: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] text-slate-400 block mb-1">Enlace Dónde Comprar</label>
+                        <input
+                          type="text"
+                          placeholder="https://..."
+                          value={newProduct.supplierUrl || ''}
+                          onChange={(e) => setNewProduct({ ...newProduct, supplierUrl: e.target.value })}
+                          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -1170,16 +1867,146 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
                   <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
                     <button
+                      type="button"
                       onClick={() => setIsNewProductModalOpen(false)}
-                      className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl"
+                      className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl cursor-pointer"
                     >
                       Cancelar
                     </button>
                     <button
+                      type="button"
                       onClick={handleCreateNewProduct}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl cursor-pointer"
                     >
                       Crear Producto
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modal: Summary of Cost Synchronization by Link */}
+            {syncSummaryModal && (
+              <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-2xl w-full p-6 space-y-5 shadow-2xl">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-2xl border border-emerald-500/30">
+                        <RefreshCw className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="font-black text-white text-base">
+                          Sincronización de Costos según Enlaces
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Precios mayoristas consultados en tiempo real desde los enlaces originales
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSyncSummaryModal(null)}
+                      className="text-slate-400 hover:text-white p-2 rounded-xl bg-slate-800 hover:bg-slate-700 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Stat Cards */}
+                  <div className="grid grid-cols-4 gap-2.5">
+                    <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 text-center">
+                      <span className="text-[10px] text-slate-500 uppercase font-black block">Total</span>
+                      <span className="text-lg font-black text-white">{syncSummaryModal.total}</span>
+                    </div>
+                    <div className="p-3 bg-emerald-950/40 rounded-2xl border border-emerald-800/60 text-center">
+                      <span className="text-[10px] text-emerald-400 uppercase font-black block">Actualizados</span>
+                      <span className="text-lg font-black text-emerald-300">+{syncSummaryModal.updated}</span>
+                    </div>
+                    <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800 text-center">
+                      <span className="text-[10px] text-slate-400 uppercase font-black block">Sin Cambios</span>
+                      <span className="text-lg font-black text-slate-300">{syncSummaryModal.unchanged}</span>
+                    </div>
+                    <div className="p-3 bg-rose-950/30 rounded-2xl border border-rose-800/40 text-center">
+                      <span className="text-[10px] text-rose-400 uppercase font-black block">Revisar</span>
+                      <span className="text-lg font-black text-rose-300">{syncSummaryModal.failed}</span>
+                    </div>
+                  </div>
+
+                  {/* List of checked products */}
+                  <div className="max-h-80 overflow-y-auto space-y-2 pr-1 rounded-2xl border border-slate-800 p-2 bg-slate-950">
+                    {syncSummaryModal.results.map((r) => (
+                      <div
+                        key={r.id}
+                        className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+                          r.priceChanged
+                            ? 'bg-emerald-950/30 border-emerald-800/60'
+                            : r.success
+                            ? 'bg-slate-900/60 border-slate-800/80'
+                            : 'bg-rose-950/30 border-rose-800/50'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-white truncate block">{r.title}</span>
+                            {r.priceChanged ? (
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black shrink-0">
+                                🔄 Costo Cambió
+                              </span>
+                            ) : r.success ? (
+                              <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-semibold shrink-0">
+                                Sin cambios
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[10px] font-bold shrink-0">
+                                Error
+                              </span>
+                            )}
+                          </div>
+                          {r.error ? (
+                            <p className="text-[11px] text-rose-400 mt-0.5">{r.error}</p>
+                          ) : (
+                            <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 mt-1">
+                              <span>
+                                Costo:{' '}
+                                <strong className="text-slate-300">{formatCurrency(r.oldCost)}</strong> ➔{' '}
+                                <strong className={r.priceChanged ? 'text-emerald-300 font-bold' : 'text-slate-200'}>
+                                  {formatCurrency(r.newCost)}
+                                </strong>
+                              </span>
+                              <span>
+                                Nuevo P. Venta:{' '}
+                                <strong className="text-emerald-400 font-mono font-black">
+                                  {formatCurrency(r.newFinalPrice)}
+                                </strong>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        {r.supplierUrl && (
+                          <a
+                            href={r.supplierUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 text-indigo-400 hover:text-white bg-slate-900 rounded-lg shrink-0 border border-slate-800"
+                            title="Ver enlace del proveedor"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                    <p className="text-[11px] text-slate-500">
+                      Los precios de venta se recalcularon automáticamente preservando tu porcentaje de ganancia.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSyncSummaryModal(null)}
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black rounded-xl transition-all shadow-md cursor-pointer"
+                    >
+                      Entendido / Cerrar
                     </button>
                   </div>
                 </div>
@@ -1821,6 +2648,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                 </div>
               )}
             </form>
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB 5: SUPER OFERTAS & CATÁLOGOS DIGITALES                  */}
+        {/* ============================================================ */}
+        {activeTab === 'super_ofertas' && (
+          <div className="space-y-6 animate-fade-in">
+            <SuperOfertasModule />
           </div>
         )}
       </main>

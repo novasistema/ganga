@@ -39,6 +39,7 @@ interface StoreContextType {
   addMultipleProducts: (products: Product[]) => Promise<number>;
   updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
+  deleteMultipleProducts: (ids: string[]) => Promise<void>;
   updateStock: (id: string, newStock: number) => Promise<void>;
   updateGlobalMarkup: (marginPercentage: number) => Promise<void>;
   saveSettings: (settings: CompanySettings) => Promise<void>;
@@ -53,6 +54,23 @@ interface StoreContextType {
   updateOrderStatus: (orderId: string, status: Order['orderStatus']) => Promise<void>;
   updatePaymentStatus: (orderId: string, status: Order['paymentStatus']) => Promise<void>;
   resetToInitialCatalog: () => Promise<void>;
+  syncProductCostFromLink: (productId: string, customUrl?: string) => Promise<{
+    success: boolean;
+    oldCost: number;
+    newCost: number;
+    newFinalPrice: number;
+    priceChanged: boolean;
+    diff: number;
+    supplierName?: string;
+    message: string;
+  }>;
+  syncAllProductCostsFromLinks: () => Promise<{
+    total: number;
+    updated: number;
+    unchanged: number;
+    failed: number;
+    results: any[];
+  }>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -134,9 +152,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             list.push({ id: d.id, ...d.data() } as Product);
           });
           setProducts(list);
+          try {
+            localStorage.setItem('dropstore_cached_products', JSON.stringify(list));
+            localStorage.setItem('dropstore_initialized', 'true');
+          } catch {}
         } else {
-          // Seed initial products to Firestore so the store is immediately rich & populated
-          seedInitialProducts();
+          // If never initialized before in this browser/installation, seed once
+          const isInit = localStorage.getItem('dropstore_initialized');
+          if (!isInit) {
+            seedInitialProducts();
+          } else {
+            // User intentionally cleared or deleted products
+            setProducts([]);
+            try {
+              localStorage.setItem('dropstore_cached_products', JSON.stringify([]));
+            } catch {}
+          }
         }
         setIsLoading(false);
       },
@@ -233,6 +264,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const fullProduct: Product = {
       ...productData,
       id: newId,
+      supplierName: productData.supplierName || (productData.supplierUrl?.includes('inova') ? 'Inova ARG' : 'Proveedor Web'),
+      supplierUrl: productData.supplierUrl || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -267,6 +300,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         finalPrice: Number(p.finalPrice) || Math.round((Number(p.originalPrice) || 12000) * 1.35),
         category: p.category || 'General',
         imageUrl: p.imageUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
+        supplierName: p.supplierName || (p.supplierUrl?.includes('inova') ? 'Inova ARG' : 'Proveedor Web'),
+        supplierUrl: p.supplierUrl || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -310,13 +345,42 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const deleteProduct = async (id: string) => {
+    // 1. Immediately remove from React state & localStorage so UI updates instantly
+    setProducts((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      try {
+        localStorage.setItem('dropstore_cached_products', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    removeFromCart(id);
+
+    // 2. Remove document from Firestore
     try {
       await deleteDoc(doc(db, 'products', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `products/${id}`);
+    } catch (error: any) {
+      console.warn('Notice deleting product from Firestore (removed locally):', error?.message);
     }
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-    removeFromCart(id);
+  };
+
+  const deleteMultipleProducts = async (ids: string[]) => {
+    // 1. Immediately remove from React state & localStorage
+    setProducts((prev) => {
+      const updated = prev.filter((p) => !ids.includes(p.id));
+      try {
+        localStorage.setItem('dropstore_cached_products', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    for (const id of ids) {
+      removeFromCart(id);
+      try {
+        await deleteDoc(doc(db, 'products', id));
+      } catch (err: any) {
+        console.warn('Notice batch deleting from Firestore:', err?.message);
+      }
+    }
   };
 
   const updateStock = async (id: string, newStock: number) => {
@@ -513,6 +577,103 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
   };
 
+  const syncProductCostFromLink = async (productId: string, customUrl?: string) => {
+    const prod = products.find((p) => p.id === productId);
+    const targetUrl = customUrl || prod?.supplierUrl;
+    if (!targetUrl || !targetUrl.trim().startsWith('http')) {
+      throw new Error('El producto no tiene un enlace de proveedor asignado.');
+    }
+
+    const res = await fetch('/api/sync-product-cost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: targetUrl.trim(),
+        markupPercentage: prod?.markupPercentage || settings.defaultProfitMargin || 40,
+        currentOriginalPrice: prod?.originalPrice || 0
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'No se pudo leer el costo desde el enlace.');
+    }
+
+    const updates: Partial<Product> = {
+      originalPrice: data.originalPrice,
+      finalPrice: data.finalPrice,
+      supplierUrl: targetUrl.trim(),
+      lastCostSyncAt: data.syncedAt || new Date().toISOString()
+    };
+    if (data.supplierName) updates.supplierName = data.supplierName;
+    if (typeof data.inStock === 'boolean') updates.inStock = data.inStock;
+
+    await updateProduct(productId, updates);
+
+    return {
+      success: true,
+      oldCost: data.oldCost,
+      newCost: data.originalPrice,
+      newFinalPrice: data.finalPrice,
+      priceChanged: Boolean(data.priceChanged),
+      diff: Number(data.diff) || 0,
+      supplierName: data.supplierName,
+      message: data.priceChanged
+        ? `Costo actualizado de $${data.oldCost?.toLocaleString('es-AR')} a $${data.originalPrice?.toLocaleString('es-AR')}`
+        : `Costo sin cambios ($${data.originalPrice?.toLocaleString('es-AR')})`
+    };
+  };
+
+  const syncAllProductCostsFromLinks = async () => {
+    const linkedProducts = products.filter(
+      (p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http')
+    );
+
+    if (linkedProducts.length === 0) {
+      return { total: 0, updated: 0, unchanged: 0, failed: 0, results: [] };
+    }
+
+    const res = await fetch('/api/sync-multiple-costs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        products: linkedProducts.map((p) => ({
+          id: p.id,
+          title: p.title,
+          supplierUrl: p.supplierUrl,
+          markupPercentage: p.markupPercentage || settings.defaultProfitMargin || 40,
+          originalPrice: p.originalPrice,
+          finalPrice: p.finalPrice
+        }))
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Error al sincronizar costos masivos');
+    }
+
+    // Apply updates to products in state and Firestore
+    const updatedResults = data.results || [];
+    for (const r of updatedResults) {
+      if (r.success && r.newCost > 0) {
+        await updateProduct(r.id, {
+          originalPrice: r.newCost,
+          finalPrice: r.newFinalPrice,
+          lastCostSyncAt: data.syncedAt || new Date().toISOString()
+        });
+      }
+    }
+
+    return {
+      total: data.total || linkedProducts.length,
+      updated: data.updated || 0,
+      unchanged: data.unchanged || 0,
+      failed: data.failed || 0,
+      results: updatedResults
+    };
+  };
+
   return (
     <StoreContext.Provider
       value={{
@@ -541,6 +702,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addMultipleProducts,
         updateProduct,
         deleteProduct,
+        deleteMultipleProducts,
         updateStock,
         updateGlobalMarkup,
         saveSettings,
@@ -554,7 +716,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         markOrderAsPaid,
         updateOrderStatus,
         updatePaymentStatus,
-        resetToInitialCatalog
+        resetToInitialCatalog,
+        syncProductCostFromLink,
+        syncAllProductCostsFromLinks
       }}
     >
       {children}
