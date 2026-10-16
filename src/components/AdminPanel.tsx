@@ -160,10 +160,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
   // --- SCRAPER LOGIC ---
   const handleScrape = async (overrideUrl?: string) => {
-    const urlToUse = overrideUrl || scrapeUrl;
-    if (!urlToUse || !urlToUse.trim()) {
+    let urlToUse = (overrideUrl || scrapeUrl || '').trim();
+    if (!urlToUse) {
       setScrapeError('Ingresa un enlace de una tienda online o producto.');
       return;
+    }
+
+    // Auto prepend https if user omitted it (e.g. inovaarg.com/... or www.plutotec...)
+    if (!urlToUse.startsWith('http://') && !urlToUse.startsWith('https://')) {
+      urlToUse = 'https://' + urlToUse;
+      setScrapeUrl(urlToUse);
     }
 
     setIsScraping(true);
@@ -188,9 +194,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
       const productsWithParsedPrices: Product[] = data.products.map((p: any) => ({
         ...p,
-        originalPrice: Number(p.originalPrice) || 15000,
+        originalPrice: Number(p.originalPrice) || 12000,
         markupPercentage: Number(markupPercent) || 40,
-        finalPrice: Math.round((Number(p.originalPrice) || 15000) * (1 + (Number(markupPercent) || 40) / 100))
+        finalPrice: Math.round((Number(p.originalPrice) || 12000) * (1 + (Number(markupPercent) || 40) / 100))
       }));
 
       setScrapedItems(productsWithParsedPrices);
@@ -221,6 +227,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
   const handleImportSingle = async (item: Product) => {
     setIsImporting(true);
+    setScrapeError(null);
     try {
       const count = await addMultipleProducts([item]);
       setImportedIds((prev) => [...prev, item.id]);
@@ -229,7 +236,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
         `¡"${item.title.substring(0, 35)}..." se cargó con éxito a tu Tienda y al Inventario!`
       );
     } catch (err: any) {
-      alert('Error al cargar el producto: ' + err.message);
+      setScrapeError('Error al cargar el producto: ' + (err.message || 'Error de persistencia'));
     } finally {
       setIsImporting(false);
     }
@@ -243,6 +250,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
     }
 
     setIsImporting(true);
+    setScrapeError(null);
     try {
       const count = await addMultipleProducts(itemsToImport);
       setImportedIds((prev) => [...prev, ...itemsToImport.map((i) => i.id)]);
@@ -251,7 +259,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
         `¡Éxito! Se cargaron ${count} producto(s) a la Tienda Pública y a tu Inventario en tiempo real.`
       );
     } catch (err: any) {
-      setScrapeError('Error al importar productos: ' + err.message);
+      setScrapeError('Error al importar productos: ' + (err.message || 'Error de persistencia'));
     } finally {
       setIsImporting(false);
     }
@@ -364,12 +372,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
   // Sincronizar costo en vivo dentro del modal de edición
   const handleSyncCostInEditModal = async () => {
-    if (!editingProduct || !editingProduct.supplierUrl || !editingProduct.supplierUrl.trim().startsWith('http')) {
+    let targetUrl = (editingProduct?.supplierUrl || '').trim();
+    if (!targetUrl) {
       setInventoryNotification({
         type: 'error',
-        message: 'Por favor ingresa un enlace de proveedor válido (https://...) antes de sincronizar.'
+        message: 'Por favor ingresa un enlace de proveedor para sincronizar.'
       });
       return;
+    }
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      targetUrl = 'https://' + targetUrl;
+      setEditingProduct((prev) => (prev ? { ...prev, supplierUrl: targetUrl } : null));
     }
 
     setIsSyncingInEditModal(true);
@@ -378,9 +391,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: editingProduct.supplierUrl.trim(),
-          markupPercentage: editingProduct.markupPercentage || 40,
-          currentOriginalPrice: editingProduct.originalPrice
+          url: targetUrl,
+          markupPercentage: editingProduct?.markupPercentage || 40,
+          currentOriginalPrice: editingProduct?.originalPrice
         })
       });
       const data = await res.json();
@@ -388,16 +401,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
         throw new Error(data.error || 'No se pudo leer el costo desde el enlace.');
       }
 
-      setEditingProduct({
-        ...editingProduct,
-        originalPrice: data.originalPrice,
-        finalPrice: data.finalPrice,
-        supplierName: data.supplierName || editingProduct.supplierName
-      });
+      setEditingProduct((prev) =>
+        prev
+          ? {
+              ...prev,
+              originalPrice: data.originalPrice || data.cost,
+              finalPrice: data.finalPrice,
+              supplierName: data.supplierName || prev.supplierName
+            }
+          : null
+      );
 
       setInventoryNotification({
         type: 'success',
-        message: `¡Costo extraído del enlace! Proveedor: ${data.supplierName} | Costo: ${formatCurrency(data.originalPrice)} | P. Venta: ${formatCurrency(data.finalPrice)}`
+        message: `¡Costo extraído del enlace! Proveedor: ${data.supplierName} | Costo: ${formatCurrency(data.originalPrice || data.cost)} | P. Venta: ${formatCurrency(data.finalPrice)}`
       });
       setTimeout(() => setInventoryNotification(null), 4000);
     } catch (err: any) {
@@ -412,12 +429,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
   // Sincronizar costo en vivo dentro del modal de nuevo producto
   const handleSyncCostInNewModal = async () => {
-    if (!newProduct.supplierUrl || !newProduct.supplierUrl.trim().startsWith('http')) {
+    let targetUrl = (newProduct.supplierUrl || '').trim();
+    if (!targetUrl) {
       setInventoryNotification({
         type: 'error',
-        message: 'Por favor ingresa un enlace de proveedor válido (https://...) para extraer el costo.'
+        message: 'Por favor ingresa un enlace de proveedor para extraer el costo.'
       });
       return;
+    }
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      targetUrl = 'https://' + targetUrl;
+      setNewProduct((prev) => ({ ...prev, supplierUrl: targetUrl }));
     }
 
     setIsSyncingInNewModal(true);
@@ -426,7 +448,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          url: newProduct.supplierUrl.trim(),
+          url: targetUrl,
           markupPercentage: newProduct.markupPercentage || 40,
           currentOriginalPrice: newProduct.originalPrice
         })
@@ -438,15 +460,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
 
       setNewProduct((prev) => ({
         ...prev,
-        originalPrice: data.originalPrice,
+        originalPrice: data.originalPrice || data.cost,
         finalPrice: data.finalPrice,
         supplierName: data.supplierName || prev.supplierName,
-        title: prev.title.trim() ? prev.title : (data.title || prev.title)
+        title: prev.title || data.title || prev.title
       }));
 
       setInventoryNotification({
         type: 'success',
-        message: `¡Costo obtenido exitosamente! Proveedor: ${data.supplierName} | Costo mayorista: ${formatCurrency(data.originalPrice)}`
+        message: `¡Costo extraído con éxito! Proveedor: ${data.supplierName} | Costo: ${formatCurrency(data.originalPrice || data.cost)} | Venta: ${formatCurrency(data.finalPrice)}`
       });
       setTimeout(() => setInventoryNotification(null), 4000);
     } catch (err: any) {
@@ -458,6 +480,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
       setIsSyncingInNewModal(false);
     }
   };
+
 
   const handleSaveProductEdit = async () => {
     if (!editingProduct) return;
@@ -833,24 +856,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                 <button
                   type="button"
                   onClick={() => {
+                    const testUrl = 'https://inovaarg.com/producto/velador-unicornio-lububu-capibara-356-h';
+                    setScrapeUrl(testUrl);
+                    handleScrape(testUrl);
+                  }}
+                  className="px-3 py-1.5 bg-indigo-950/70 hover:bg-indigo-900/90 border border-indigo-700/60 rounded-xl text-indigo-200 font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>🦄 Inova ARG: Velador Unicornio Labubu Capibara ($3.600)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const testUrl = 'https://www.plutotec.com.ar/categoria/bazar/afilador-de-cuchillos';
+                    setScrapeUrl(testUrl);
+                    handleScrape(testUrl);
+                  }}
+                  className="px-3 py-1.5 bg-amber-950/70 hover:bg-amber-900/90 border border-amber-700/60 rounded-xl text-amber-200 font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>🔪 Plutotec: Afilador de Cuchillos Profesional ($4.500)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const testUrl = 'https://inovaarg.com/producto/adaptador-universal-viaje-con-usb/';
+                    setScrapeUrl(testUrl);
+                    handleScrape(testUrl);
+                  }}
+                  className="px-3 py-1.5 bg-emerald-950/70 hover:bg-emerald-900/90 border border-emerald-700/60 rounded-xl text-emerald-200 font-medium transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <span>🔌 Inova ARG: Adaptador Universal ($4.200)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     const demoUrl = 'https://demo-supplier.com/gadgets-catalog';
                     setScrapeUrl(demoUrl);
                     handleScrape(demoUrl);
                   }}
                   className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-slate-300 font-medium transition-colors cursor-pointer"
                 >
-                  ⚡ Catálogo Tech & Gadgets (4 ítems)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const demoUrl = 'https://demo-supplier.com/moda-urbana';
-                    setScrapeUrl(demoUrl);
-                    handleScrape(demoUrl);
-                  }}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-slate-300 font-medium transition-colors cursor-pointer"
-                >
-                  👟 Catálogo Moda & Sneakers (2 ítems)
+                  ⚡ Catálogo Tech Demo
                 </button>
               </div>
 
@@ -2311,8 +2356,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                       <label className="text-xs font-bold text-slate-300">
                         Contraseña Actual
                       </label>
-                      <span className="text-[10px] text-amber-300/80 font-mono">
-                        (Clave por defecto: admin123)
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        (Ingresa tu contraseña actual)
                       </span>
                     </div>
                     <div className="relative">
@@ -2320,7 +2365,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                         type={showPassword ? 'text' : 'password'}
                         value={passwordForm.currentPassword}
                         onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                        placeholder="Ingresa tu contraseña actual (o admin123)"
+                        placeholder="Ingresa tu contraseña actual"
                         className="w-full pl-3.5 pr-10 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:outline-hidden focus:border-indigo-500"
                       />
                       <button

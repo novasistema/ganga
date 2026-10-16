@@ -135,7 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!isCurrentMatch) {
       return {
         success: false,
-        error: 'La contraseña actual no es correcta. La clave por defecto es "admin123".'
+        error: 'La contraseña actual no es correcta. Verifica tus datos de acceso.'
       };
     }
 

@@ -329,8 +329,8 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
       });
 
       const data = await res.json();
-      if (data.success && data.cost > 0) {
-        const newCost = data.cost;
+      const newCost = Number(data.cost || data.originalPrice) || 0;
+      if (data.success && newCost > 0) {
         let newFinalPrice = Math.round(newCost * (1 + deal.markupPercentage / 100));
         if (roundToHundreds) newFinalPrice = Math.ceil(newFinalPrice / 100) * 100;
 
