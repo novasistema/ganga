@@ -45,6 +45,16 @@ export interface SuperOfferDeal {
   selected?: boolean;       // Seleccionado para importar / publicar
   isSyncedToInventory?: boolean;
   inventoryProductId?: string;
+  priceStampConfig?: PriceStampConfig;
+}
+
+export interface PriceStampConfig {
+  enabled: boolean;
+  position: 'bottom-right' | 'bottom-center' | 'bottom-left' | 'top-right' | 'top-left';
+  badgeStyle: 'red-gold' | 'yellow-black' | 'dark-neon' | 'blue-metal';
+  badgeText: string;
+  customPrice?: number;
+  stampedImageUrl?: string;
 }
 
 export interface SuperOfferCatalog {
@@ -95,6 +105,46 @@ export interface Order {
   updatedAt?: string;
 }
 
+export interface HeroBannerFeature {
+  id: string;
+  icon: 'zap' | 'credit-card' | 'shield' | 'flame' | 'truck' | 'tag' | 'gift' | 'clock' | 'sparkles' | 'badge';
+  title: string;
+  description: string;
+}
+
+export interface HeroBannerItem {
+  id: string;
+  badgeText: string;
+  badgeIcon?: string;
+  title: string;
+  titleHighlight?: string;
+  description: string;
+  showCountdown: boolean;
+  countdownHours?: number;
+  countdownMinutes?: number;
+  countdownLabel?: string;
+  primaryButtonText: string;
+  primaryButtonAction?: 'scroll_catalog' | 'category' | 'link';
+  primaryButtonTarget?: string;
+  secondaryButtonText?: string;
+  secondaryButtonCategory?: string;
+  secondaryButtonLink?: string;
+  backgroundGradient?: string;
+  imageUrl?: string;
+  features?: HeroBannerFeature[];
+  active: boolean;
+  sortOrder?: number;
+}
+
+export interface StoreCategory {
+  id: string;
+  name: string;
+  icon?: string;
+  description?: string;
+  imageUrl?: string;
+  isCustom?: boolean;
+}
+
 export interface CompanySettings {
   companyName: string;
   email: string;
@@ -111,6 +161,8 @@ export interface CompanySettings {
   gatewayEnabled: boolean;
   freeShippingThreshold: number;
   announcementText: string;
+  banners?: HeroBannerItem[];
+  categories?: StoreCategory[];
   // Mercado Pago configuration
   mercadoPagoAccessToken?: string;
   mercadoPagoPublicKey?: string;
@@ -123,3 +175,4 @@ export interface CartItem {
   product: Product;
   quantity: number;
 }
+

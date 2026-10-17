@@ -10,8 +10,8 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { Product, Order, CompanySettings, CartItem } from '../types';
-import { DEFAULT_SETTINGS, INITIAL_PRODUCTS } from '../data/initialData';
+import { Product, Order, CompanySettings, CartItem, HeroBannerItem, StoreCategory } from '../types';
+import { DEFAULT_SETTINGS, INITIAL_PRODUCTS, DEFAULT_BANNERS, DEFAULT_CATEGORIES } from '../data/initialData';
 
 interface StoreContextType {
   products: Product[];
@@ -43,10 +43,19 @@ interface StoreContextType {
   updateStock: (id: string, newStock: number) => Promise<void>;
   updateGlobalMarkup: (marginPercentage: number) => Promise<void>;
   saveSettings: (settings: CompanySettings) => Promise<void>;
+  categories: StoreCategory[];
+  addCategory: (category: Omit<StoreCategory, 'id'>) => Promise<string>;
+  updateCategory: (id: string, updates: Partial<StoreCategory>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
+  ensureCategoryExists: (categoryName: string, icon?: string) => Promise<string>;
+  banners: HeroBannerItem[];
+  saveBanners: (banners: HeroBannerItem[]) => Promise<void>;
   isBudgetTrackingOpen: boolean;
   trackingOrderId: string;
   setIsBudgetTrackingOpen: (open: boolean) => void;
   setTrackingOrderId: (id: string) => void;
+  isSuperOfertasOpen: boolean;
+  setIsSuperOfertasOpen: (open: boolean) => void;
   createOrder: (orderData: Omit<Order, 'id' | 'createdAt'>) => Promise<string>;
   verifyAndSendBudget: (orderId: string, updatedItems: any[], notes: string, adjustedTotal: number) => Promise<string>;
   generateMercadoPagoLink: (order: Order) => Promise<{ initPoint: string; deepLink: string; preferenceId: string }>;
@@ -107,6 +116,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isLoading, setIsLoading] = useState(true);
   const [isBudgetTrackingOpen, setIsBudgetTrackingOpen] = useState(false);
   const [trackingOrderId, setTrackingOrderId] = useState<string>('');
+  const [isSuperOfertasOpen, setIsSuperOfertasOpen] = useState(false);
 
   // Sync cart to localStorage
   useEffect(() => {
@@ -419,6 +429,132 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSettings(payload);
   };
 
+  // Helper to detect category icon emoji
+  const detectCategoryEmoji = (name: string): string => {
+    const low = name.toLowerCase();
+    if (low.includes('tecno') || low.includes('gadget') || low.includes('smart') || low.includes('celular') || low.includes('movil') || low.includes('reloj')) return '📱';
+    if (low.includes('audio') || low.includes('auricular') || low.includes('sonido') || low.includes('parlante') || low.includes('headphone')) return '🎧';
+    if (low.includes('herramienta') || low.includes('ferreteria') || low.includes('taller') || low.includes('mecanic') || low.includes('extractor') || low.includes('llave') || low.includes('pinza')) return '🔧';
+    if (low.includes('hogar') || low.includes('casa') || low.includes('luz') || low.includes('lamp') || low.includes('ilumin') || low.includes('velador') || low.includes('foco')) return '💡';
+    if (low.includes('bazar') || low.includes('cocina') || low.includes('cuchill') || low.includes('termo') || low.includes('vaso') || low.includes('comida') || low.includes('afilador')) return '🍳';
+    if (low.includes('moda') || low.includes('ropa') || low.includes('mochila') || low.includes('bolso') || low.includes('accesorio') || low.includes('valija')) return '🎒';
+    if (low.includes('belleza') || low.includes('cuidado') || low.includes('barber') || low.includes('pelo') || low.includes('facial') || low.includes('afeitad')) return '💄';
+    if (low.includes('auto') || low.includes('vehicul') || low.includes('moto') || low.includes('car')) return '🚗';
+    if (low.includes('juguete') || low.includes('bebe') || low.includes('nino') || low.includes('gamer') || low.includes('game')) return '🎮';
+    if (low.includes('deporte') || low.includes('fitness') || low.includes('gym') || low.includes('entren')) return '⚽';
+    if (low.includes('oferta') || low.includes('super') || low.includes('liquidac') || low.includes('descuento')) return '🔥';
+    return '📦';
+  };
+
+  // Computed categories from settings + dynamic discovery
+  const categories: StoreCategory[] = React.useMemo(() => {
+    const baseList = (settings.categories && settings.categories.length > 0)
+      ? settings.categories
+      : DEFAULT_CATEGORIES;
+    const knownNames = new Set(baseList.map((c) => c.name.toLowerCase().trim()));
+    const autoDiscovered: StoreCategory[] = [];
+    for (const p of products) {
+      const catName = p.category?.trim();
+      if (catName && !knownNames.has(catName.toLowerCase()) && catName !== 'Todos') {
+        knownNames.add(catName.toLowerCase());
+        autoDiscovered.push({
+          id: `cat-auto-${catName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          name: catName,
+          icon: detectCategoryEmoji(catName),
+          description: `Categoría detectada automáticamente de productos`,
+          isCustom: true
+        });
+      }
+    }
+    return [...baseList, ...autoDiscovered];
+  }, [settings.categories, products]);
+
+  // Computed active banners
+  const banners: HeroBannerItem[] = React.useMemo(() => {
+    return (settings.banners && settings.banners.length > 0)
+      ? settings.banners
+      : DEFAULT_BANNERS;
+  }, [settings.banners]);
+
+  const saveBanners = async (newBanners: HeroBannerItem[]) => {
+    const updated = {
+      ...settings,
+      banners: newBanners
+    };
+    await saveSettings(updated);
+  };
+
+  const addCategory = async (catData: Omit<StoreCategory, 'id'>) => {
+    const cleanName = catData.name.trim();
+    const newId = `cat-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newCat: StoreCategory = {
+      id: newId,
+      name: cleanName,
+      icon: catData.icon || detectCategoryEmoji(cleanName),
+      description: catData.description || '',
+      imageUrl: catData.imageUrl,
+      isCustom: true
+    };
+    const currentList = settings.categories && settings.categories.length > 0 ? settings.categories : DEFAULT_CATEGORIES;
+    const updated = [...currentList, newCat];
+    await saveSettings({
+      ...settings,
+      categories: updated
+    });
+    return newId;
+  };
+
+  const updateCategory = async (id: string, updates: Partial<StoreCategory>) => {
+    const currentList = settings.categories && settings.categories.length > 0 ? settings.categories : DEFAULT_CATEGORIES;
+    const oldCat = currentList.find((c) => c.id === id);
+    const updatedList = currentList.map((c) => (c.id === id ? { ...c, ...updates } : c));
+    await saveSettings({
+      ...settings,
+      categories: updatedList
+    });
+    // If category name changed, synchronize it on existing products
+    if (updates.name && oldCat && updates.name !== oldCat.name) {
+      for (const p of products) {
+        if (p.category === oldCat.name) {
+          await updateProduct(p.id, { category: updates.name.trim() });
+        }
+      }
+    }
+  };
+
+  const deleteCategory = async (id: string) => {
+    const currentList = settings.categories && settings.categories.length > 0 ? settings.categories : DEFAULT_CATEGORIES;
+    const updatedList = currentList.filter((c) => c.id !== id);
+    await saveSettings({
+      ...settings,
+      categories: updatedList
+    });
+  };
+
+  const ensureCategoryExists = async (categoryName: string, icon?: string): Promise<string> => {
+    if (!categoryName || !categoryName.trim()) return 'General';
+    const cleanName = categoryName.trim();
+    const currentList = settings.categories && settings.categories.length > 0 ? settings.categories : DEFAULT_CATEGORIES;
+    const existing = currentList.find((c) => c.name.toLowerCase() === cleanName.toLowerCase());
+    if (existing) {
+      return existing.name;
+    }
+    const newCat: StoreCategory = {
+      id: `cat-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: cleanName,
+      icon: icon || detectCategoryEmoji(cleanName),
+      description: `Categoría importada automáticamente de enlace o proveedor`,
+      isCustom: true
+    };
+    const updatedList = [...currentList, newCat];
+    await saveSettings({
+      ...settings,
+      categories: updatedList
+    });
+    return cleanName;
+  };
+
+
   const createOrder = async (orderData: Omit<Order, 'id' | 'createdAt'>): Promise<string> => {
     const orderId = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
     const fullOrder: Order = {
@@ -706,10 +842,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateStock,
         updateGlobalMarkup,
         saveSettings,
+        categories,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        ensureCategoryExists,
+        banners,
+        saveBanners,
         isBudgetTrackingOpen,
         trackingOrderId,
         setIsBudgetTrackingOpen,
         setTrackingOrderId,
+        isSuperOfertasOpen,
+        setIsSuperOfertasOpen,
         createOrder,
         verifyAndSendBudget,
         generateMercadoPagoLink,

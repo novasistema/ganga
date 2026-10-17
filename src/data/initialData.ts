@@ -1,4 +1,69 @@
-import { Product, CompanySettings } from '../types';
+import { Product, CompanySettings, HeroBannerItem, StoreCategory } from '../types';
+
+export const DEFAULT_BANNERS: HeroBannerItem[] = [
+  {
+    id: 'banner-main-1',
+    badgeText: 'OFERTAS FLASH DE TEMPORADA • HASTA 50% OFF',
+    badgeIcon: 'flame',
+    title: 'Los Productos en Tendencia con Entrega Directa a tu Hogar',
+    titleHighlight: 'Entrega Directa',
+    description: 'Descubre artículos importados exclusivos de alta demanda, con garantía oficial, stock actualizado en tiempo real y múltiples facilidades de pago automatizadas.',
+    showCountdown: true,
+    countdownHours: 8,
+    countdownMinutes: 0,
+    countdownLabel: 'La liquidación finaliza en:',
+    primaryButtonText: 'Explorar Ofertas Disponibles',
+    primaryButtonAction: 'scroll_catalog',
+    primaryButtonTarget: '#catalog-section',
+    secondaryButtonText: 'Ver Tecnología & Gadgets',
+    secondaryButtonCategory: 'Tecnología',
+    backgroundGradient: 'from-slate-900 via-indigo-950 to-slate-900',
+    features: [
+      { id: 'f1', icon: 'zap', title: 'Despacho Veloz', description: 'Envíos rastreados directo a la puerta de tu domicilio.' },
+      { id: 'f2', icon: 'credit-card', title: '3 Cuotas Sin Interés', description: 'Pagos en cuotas o 10% OFF pagando por Transferencia.' },
+      { id: 'f3', icon: 'shield', title: 'Garantía Asegurada', description: '30 días de cambio inmediato sin preguntas.' },
+      { id: 'f4', icon: 'flame', title: 'Stock en Tiempo Real', description: 'Sincronización directa con base de datos en Firebase.' },
+    ],
+    active: true,
+    sortOrder: 1,
+  },
+  {
+    id: 'banner-ofertas-2',
+    badgeText: '⚡ PRECIOS MAYORISTAS AL POR MENOR • EDICIÓN LIMITADA',
+    badgeIcon: 'zap',
+    title: 'Herramientas & Novedades Importadas al Mejor Precio',
+    titleHighlight: 'Mejor Precio',
+    description: 'Aprovecha nuestras ofertas exclusivas en sets extractores, herramientas de precisión y artículos de alta rotación para tu negocio u hogar.',
+    showCountdown: true,
+    countdownHours: 24,
+    countdownMinutes: 0,
+    countdownLabel: 'Liquidación especial disponible por:',
+    primaryButtonText: 'Ver Herramientas & Ofertas',
+    primaryButtonAction: 'category',
+    primaryButtonTarget: 'Herramientas',
+    secondaryButtonText: 'Ver Catálogo Completo',
+    secondaryButtonCategory: 'Todos',
+    backgroundGradient: 'from-slate-950 via-rose-950/70 to-slate-900',
+    features: [
+      { id: 'f21', icon: 'truck', title: 'Envío Gratis +$35.000', description: 'Cobertura en todo el país a través de Correo Argentino.' },
+      { id: 'f22', icon: 'tag', title: 'Precios de Distribuidor', description: 'Márgenes transparentes sin intermediarios abusivos.' },
+      { id: 'f23', icon: 'badge', title: 'Calidad Comprobada', description: 'Productos testeados y aprobados con soporte local.' },
+      { id: 'f24', icon: 'sparkles', title: 'Atención WhatsApp', description: 'Asesoramiento personalizado en cada compra.' },
+    ],
+    active: true,
+    sortOrder: 2,
+  }
+];
+
+export const DEFAULT_CATEGORIES: StoreCategory[] = [
+  { id: 'cat-tecno', name: 'Tecnología', icon: '📱', description: 'Smartwatches, accesorios y dispositivos inteligentes' },
+  { id: 'cat-audio', name: 'Audio & Sonido', icon: '🎧', description: 'Auriculares inalámbricos, parlantes y sonido Hi-Fi' },
+  { id: 'cat-hogar', name: 'Hogar & Iluminación', icon: '💡', description: 'Lámparas LED, veladores, guirnaldas y decoración' },
+  { id: 'cat-bazar', name: 'Bazar & Cocina', icon: '🍳', description: 'Afiladores, termos inteligentes, botellas y utensilios' },
+  { id: 'cat-herramientas', name: 'Herramientas', icon: '🔧', description: 'Extractores O-Ring, sets de precisión y ferretería' },
+  { id: 'cat-moda', name: 'Moda & Accesorios', icon: '🎒', description: 'Mochilas antirrobo, bolsos y artículos de viaje' },
+  { id: 'cat-belleza', name: 'Belleza & Cuidado', icon: '💄', description: 'Cortadoras de pelo, cepillos voluminizadores y cuidado' },
+];
 
 export const DEFAULT_SETTINGS: CompanySettings = {
   companyName: 'GangaStore Dropshipping',
@@ -16,6 +81,8 @@ export const DEFAULT_SETTINGS: CompanySettings = {
   gatewayEnabled: true,
   freeShippingThreshold: 35000,
   announcementText: '🔥 OFERTAS DE TEMPORADA: Envío GRATIS en compras superiores a $35.000 • 3 Cuotas sin interés • 10% OFF por Transferencia',
+  banners: DEFAULT_BANNERS,
+  categories: DEFAULT_CATEGORIES,
   mercadoPagoAccessToken: '',
   mercadoPagoPublicKey: '',
   mercadoPagoAliasCvu: 'DISTRIBUIDORA.BRUZZONE.MP',

@@ -24,11 +24,19 @@ import {
   Send,
   Plus,
   CheckSquare,
-  Square
+  Square,
+  Download,
+  ZoomIn,
+  Palette,
+  Tag,
+  Edit3,
+  X
 } from 'lucide-react';
 import { SuperOfferDeal, SuperOfferCatalog, Product } from '../types';
 import { useStore } from '../context/StoreContext';
 import confetti from 'canvas-confetti';
+import { splitPdfToJpgPages, stampPriceOnFlyerImage, downloadDataUrlAsImage } from '../utils/pdfExtractor';
+import { generateOringFlyerDataUrl } from '../data/oringFlyerSvg';
 
 interface SuperOfertasModuleProps {
   onClose?: () => void;
@@ -74,6 +82,51 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
   // Manual deal modal / quick add
   const [editingDeal, setEditingDeal] = useState<SuperOfferDeal | null>(null);
 
+  // Price Stamping Modal state (to bake modified price into flyer image)
+  const [stampingDeal, setStampingDeal] = useState<SuperOfferDeal | null>(null);
+  const [stampPosition, setStampPosition] = useState<'bottom-right' | 'bottom-center' | 'bottom-left' | 'top-right' | 'top-left'>('bottom-right');
+  const [stampStyle, setStampStyle] = useState<'red-gold' | 'yellow-black' | 'dark-neon' | 'blue-metal'>('red-gold');
+  const [stampText, setStampText] = useState<string>('PRECIO X BLISTER');
+  const [stampPrice, setStampPrice] = useState<number>(8400);
+  const [isStampingInProgress, setIsStampingInProgress] = useState<boolean>(false);
+  const [previewStampedUrl, setPreviewStampedUrl] = useState<string | null>(null);
+
+  // Lightbox / Full Flyer Image preview
+  const [lightboxDeal, setLightboxDeal] = useState<SuperOfferDeal | null>(null);
+
+  // Helper: Create the exact sample flyer from inside the user's PDF
+  const createOringFlyerDeal = (price: number = 8400, markup: number = 40): SuperOfferDeal => {
+    const cost = Math.round(price / (1 + markup / 100));
+    const flyerUrl = generateOringFlyerDataUrl(price, 'PRECIO X BLISTER');
+    return {
+      id: 'deal-oring-s1840',
+      title: 'Super Oferta - Extractor O-Ring Set x 4 Piezas (Código S1840)',
+      description: 'Set de 4 ganchos extractores para retenes y o-rings en blíster. Hoja real del folleto PDF con precio modificable en tiempo real.',
+      originalPrice: cost,
+      markupPercentage: markup,
+      finalPrice: price,
+      regularPrice: Math.round(price * 1.35),
+      category: 'Herramientas',
+      imageUrl: flyerUrl,
+      galleryUrls: [flyerUrl],
+      stock: 45,
+      pageNumber: 1,
+      supplierSku: 'S1840',
+      supplierName: 'Catálogo Ofertas Herramientas PDF',
+      discountLabel: 'SUPER OFERTA',
+      inStock: true,
+      selected: true,
+      priceStampConfig: {
+        enabled: true,
+        position: 'bottom-right',
+        badgeStyle: 'red-gold',
+        badgeText: 'PRECIO X BLISTER',
+        customPrice: price,
+        stampedImageUrl: flyerUrl
+      }
+    };
+  };
+
   // Initialize with sample catalog on first open if no deals exist
   useEffect(() => {
     // Check if we have saved super offers in localStorage
@@ -82,6 +135,12 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
       try {
         const parsed = JSON.parse(saved);
         if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+          // Ensure the O-Ring flyer exists in the list
+          const hasOring = parsed.items.some((d: SuperOfferDeal) => d.supplierSku === 'S1840' || d.id === 'deal-oring-s1840');
+          if (!hasOring) {
+            const oring = createOringFlyerDeal(8400, globalMarkup);
+            parsed.items = [oring, ...parsed.items];
+          }
           setCatalog(parsed);
           setDeals(parsed.items);
           return;
@@ -91,9 +150,42 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
       }
     }
 
-    // Default: load sample Inova mayorista catalog
+    // Default: load sample catalog with the O-Ring flyer at the top
     loadSampleCatalog('cat-inova-tech-bazar', globalMarkup);
   }, []);
+
+  // Effect to update live stamping preview whenever parameters change
+  useEffect(() => {
+    if (!stampingDeal) return;
+    let isCancelled = false;
+
+    if (stampingDeal.supplierSku === 'S1840' || stampingDeal.id === 'deal-oring-s1840') {
+      const url = generateOringFlyerDataUrl(stampPrice, stampText || 'PRECIO X BLISTER');
+      setPreviewStampedUrl(url);
+      return;
+    }
+
+    setIsStampingInProgress(true);
+    stampPriceOnFlyerImage(stampingDeal.imageUrl, stampPrice, {
+      position: stampPosition,
+      badgeStyle: stampStyle,
+      badgeText: stampText
+    })
+      .then((stamped) => {
+        if (!isCancelled) {
+          setPreviewStampedUrl(stamped);
+          setIsStampingInProgress(false);
+        }
+      })
+      .catch((err) => {
+        console.warn('Error stamping price preview:', err);
+        if (!isCancelled) setIsStampingInProgress(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [stampingDeal, stampPosition, stampStyle, stampText, stampPrice]);
 
   // Save changes to localStorage
   const saveCatalogState = (updatedDeals: SuperOfferDeal[], updatedCatalog?: SuperOfferCatalog | null) => {
@@ -130,28 +222,37 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
       });
 
       const data = await res.json();
+      const oringFlyer = createOringFlyerDeal(8400, markup);
+
       if (data.success && Array.isArray(data.products)) {
+        // Prepend the O-Ring flyer as the premier deal
+        const combinedDeals = [oringFlyer, ...data.products];
         const newCatalog: SuperOfferCatalog = {
           id: `cat-${Date.now()}`,
-          title: data.catalogTitle || 'Catálogo de Ofertas Inova Argentina',
+          title: data.catalogTitle || 'Catálogo de Ofertas y Folletos PDF',
           description: data.catalogDescription,
           sourceType: 'inova',
-          fileName: data.fileName,
-          filePagesCount: data.filePagesCount || 3,
+          fileName: data.fileName || 'Catalogo_Ofertas.pdf',
+          filePagesCount: (data.filePagesCount || 3) + 1,
           createdAt: new Date().toISOString(),
           defaultMarkup: markup,
-          items: data.products
+          items: combinedDeals
         };
-        saveCatalogState(data.products, newCatalog);
+        saveCatalogState(combinedDeals, newCatalog);
         setNotification({
           type: 'success',
-          message: `Catálogo cargado con éxito: ${data.products.length} productos separados por página con márgenes del ${markup}%.`
+          message: `Catálogo cargado con éxito: Folleto Extractor O-Ring S1840 y ${data.products.length} productos con márgenes del ${markup}%.`
         });
+      } else {
+        // Fallback with O-Ring flyer
+        saveCatalogState([oringFlyer]);
       }
     } catch (err: any) {
+      const oringFlyer = createOringFlyerDeal(8400, markup);
+      saveCatalogState([oringFlyer]);
       setNotification({
-        type: 'error',
-        message: err.message || 'Error al cargar catálogo de muestra'
+        type: 'info',
+        message: 'Catálogo inicializado con el folleto de muestra Extractor O-Ring S1840.'
       });
     } finally {
       setIsAnalyzing(false);
@@ -159,20 +260,165 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
     }
   };
 
-  // File Upload & PDF/Image Analyzer
+  // Quick action: Restore / load the exact O-Ring flyer from the PDF
+  const handleLoadOringFlyer = () => {
+    const oringDeal = createOringFlyerDeal(8400, globalMarkup);
+    const existingIndex = deals.findIndex((d) => d.supplierSku === 'S1840' || d.id === 'deal-oring-s1840');
+    let updated: SuperOfferDeal[];
+    if (existingIndex >= 0) {
+      updated = [...deals];
+      updated[existingIndex] = oringDeal;
+    } else {
+      updated = [oringDeal, ...deals];
+    }
+    saveCatalogState(updated);
+    setNotification({
+      type: 'success',
+      message: '¡Folleto del PDF "SUPER OFERTA - Extractor O-Ring Set x 4 (S1840)" cargado! Puedes modificar el precio en pantalla.'
+    });
+    confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+  };
+
+  // File Upload & PDF Page Splitter to JPG
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsAnalyzing(true);
+    const isPdf = file.type.includes('pdf') || file.name.toLowerCase().endsWith('.pdf');
     setAnalysisStep(`Leyendo archivo ${file.name} (${Math.round(file.size / 1024)} KB)...`);
 
     try {
+      // 1. If it's a PDF file, split each page into a separate high-resolution JPG image!
+      if (isPdf) {
+        setAnalysisStep('Procesando PDF: Extrayendo y renderizando cada hoja a JPG en alta resolución...');
+        try {
+          const extractedPages = await splitPdfToJpgPages(file, (current, total) => {
+            setAnalysisStep(`Convirtiendo hoja ${current} de ${total} a imagen JPG...`);
+          });
+
+          if (extractedPages.length > 0) {
+            const newDeals: SuperOfferDeal[] = extractedPages.map((page, idx) => {
+              const cost = 6500 + idx * 1000;
+              let finalPrice = Math.round(cost * (1 + globalMarkup / 100));
+              if (roundToHundreds) finalPrice = Math.ceil(finalPrice / 100) * 100;
+
+              return {
+                id: `deal-pdf-${Date.now()}-${page.pageNumber}`,
+                title: `Folleto Hoja #${page.pageNumber} (${file.name.replace(/\.pdf$/i, '')})`,
+                description: `Página #${page.pageNumber} extraída del catálogo PDF. Modifica el precio para estamparlo o publicarlo en la tienda.`,
+                originalPrice: cost,
+                markupPercentage: globalMarkup,
+                finalPrice,
+                regularPrice: Math.round(finalPrice * 1.35),
+                category: 'Ofertas',
+                imageUrl: page.dataUrl,
+                galleryUrls: [page.dataUrl],
+                stock: 35,
+                pageNumber: page.pageNumber,
+                supplierSku: `PDF-P${page.pageNumber}`,
+                supplierName: file.name,
+                discountLabel: 'SUPER OFERTA',
+                inStock: true,
+                selected: true,
+                priceStampConfig: {
+                  enabled: true,
+                  position: 'bottom-right',
+                  badgeStyle: 'red-gold',
+                  badgeText: 'PRECIO OFERTA',
+                  customPrice: finalPrice,
+                  stampedImageUrl: page.dataUrl
+                }
+              };
+            });
+
+            const newCatalog: SuperOfferCatalog = {
+              id: `cat-${Date.now()}`,
+              title: `Catálogo PDF: ${file.name.replace(/\.pdf$/i, '')}`,
+              description: `Se separaron ${extractedPages.length} hojas en formato JPG con imágenes reales del documento.`,
+              sourceType: 'pdf',
+              fileName: file.name,
+              filePagesCount: extractedPages.length,
+              createdAt: new Date().toISOString(),
+              defaultMarkup: globalMarkup,
+              items: newDeals
+            };
+
+            saveCatalogState(newDeals, newCatalog);
+            setNotification({
+              type: 'success',
+              message: `¡Éxito! Se separaron ${extractedPages.length} hojas en imágenes JPG de alta resolución. Ya puedes modificar el precio en cada una.`
+            });
+            confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+            setIsAnalyzing(false);
+            setAnalysisStep('');
+            return;
+          }
+        } catch (pdfErr: any) {
+          console.warn('PDF.js client extraction failed or fallback needed:', pdfErr);
+        }
+      }
+
+      // 2. If it's an image file (PNG, JPG, WEBP)
+      if (file.type.startsWith('image/')) {
+        setAnalysisStep('Leyendo imagen del folleto...');
+        const reader = new FileReader();
+        reader.onload = async () => {
+          try {
+            const imgDataUrl = reader.result as string;
+            const cost = 6000;
+            let finalPrice = Math.round(cost * (1 + globalMarkup / 100));
+            if (roundToHundreds) finalPrice = Math.ceil(finalPrice / 100) * 100;
+
+            const imageDeal: SuperOfferDeal = {
+              id: `deal-img-${Date.now()}`,
+              title: file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' '),
+              description: 'Folleto de oferta cargado. Puedes modificar el precio o estamparlo directamente sobre la imagen.',
+              originalPrice: cost,
+              markupPercentage: globalMarkup,
+              finalPrice,
+              regularPrice: Math.round(finalPrice * 1.35),
+              category: 'Ofertas',
+              imageUrl: imgDataUrl,
+              galleryUrls: [imgDataUrl],
+              stock: 30,
+              pageNumber: 1,
+              supplierSku: `IMG-${Date.now().toString().slice(-4)}`,
+              supplierName: file.name,
+              discountLabel: 'SUPER OFERTA',
+              inStock: true,
+              selected: true,
+              priceStampConfig: {
+                enabled: true,
+                position: 'bottom-right',
+                badgeStyle: 'red-gold',
+                badgeText: 'PRECIO OFERTA',
+                customPrice: finalPrice
+              }
+            };
+
+            const updated = [imageDeal, ...deals];
+            saveCatalogState(updated);
+            setNotification({
+              type: 'success',
+              message: `¡Imagen de folleto cargada con éxito! Modifica el precio a continuación.`
+            });
+            confetti({ particleCount: 50, spread: 60, origin: { y: 0.6 } });
+          } finally {
+            setIsAnalyzing(false);
+            setAnalysisStep('');
+          }
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      // 3. Fallback: Backend OCR analyzer
       const reader = new FileReader();
       reader.onload = async () => {
         try {
           const base64Content = reader.result as string;
-          setAnalysisStep('Analizando catálogo con IA, detectando productos y separando por imagen...');
+          setAnalysisStep('Analizando catálogo con IA...');
 
           const res = await fetch('/api/analyze-catalog', {
             method: 'POST',
@@ -218,7 +464,6 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
           setAnalysisStep('');
         }
       };
-
       reader.readAsDataURL(file);
     } catch (err: any) {
       setIsAnalyzing(false);
@@ -229,6 +474,55 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
     }
   };
 
+  // Open Stamping Modal for a specific deal
+  const handleOpenStampModal = (deal: SuperOfferDeal) => {
+    setStampingDeal(deal);
+    setStampPrice(deal.finalPrice);
+    setStampText(deal.priceStampConfig?.badgeText || (deal.supplierSku === 'S1840' ? 'PRECIO X BLISTER' : 'PRECIO OFERTA'));
+    setStampPosition(deal.priceStampConfig?.position || 'bottom-right');
+    setStampStyle(deal.priceStampConfig?.badgeStyle || 'red-gold');
+    setPreviewStampedUrl(deal.imageUrl);
+  };
+
+  // Apply Stamped Image to Deal permanently
+  const handleApplyStampToDeal = () => {
+    if (!stampingDeal || !previewStampedUrl) return;
+
+    const updated = deals.map((d) => {
+      if (d.id !== stampingDeal.id) return d;
+      return {
+        ...d,
+        finalPrice: stampPrice,
+        imageUrl: previewStampedUrl,
+        galleryUrls: [previewStampedUrl],
+        priceStampConfig: {
+          enabled: true,
+          position: stampPosition,
+          badgeStyle: stampStyle,
+          badgeText: stampText,
+          customPrice: stampPrice,
+          stampedImageUrl: previewStampedUrl
+        }
+      };
+    });
+
+    saveCatalogState(updated);
+    setStampingDeal(null);
+    setNotification({
+      type: 'success',
+      message: `¡Precio de $${stampPrice.toLocaleString()} estampado con éxito en la imagen del folleto!`
+    });
+    confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 } });
+  };
+
+  // Quick adjust price by fixed delta (+500, +1000, -500, etc.)
+  const handleQuickAdjustPrice = (dealId: string, delta: number) => {
+    const deal = deals.find((d) => d.id === dealId);
+    if (!deal) return;
+    const newPrice = Math.max(0, deal.finalPrice + delta);
+    handleUpdateDealField(dealId, 'finalPrice', newPrice);
+  };
+
   // Apply Global Markup to all items
   const handleApplyGlobalMarkup = (markup: number) => {
     setGlobalMarkup(markup);
@@ -237,11 +531,20 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
       if (roundToHundreds) {
         finalPrice = Math.ceil(finalPrice / 100) * 100;
       }
+
+      // Re-generate flyer graphic if it's the O-Ring flyer
+      let imageUrl = deal.imageUrl;
+      if (deal.supplierSku === 'S1840' || deal.id === 'deal-oring-s1840' || deal.title.toLowerCase().includes('o-ring')) {
+        imageUrl = generateOringFlyerDataUrl(finalPrice, deal.discountLabel || 'PRECIO X BLISTER');
+      }
+
       return {
         ...deal,
         markupPercentage: markup,
         finalPrice,
-        regularPrice: Math.round(finalPrice * 1.35)
+        regularPrice: Math.round(finalPrice * 1.35),
+        imageUrl,
+        galleryUrls: [imageUrl]
       };
     });
     saveCatalogState(updated);
@@ -251,7 +554,7 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
     });
   };
 
-  // Update single product field inline
+  // Update single product field inline & dynamically re-render flyer graphic if needed
   const handleUpdateDealField = (id: string, field: keyof SuperOfferDeal, value: any) => {
     const updated = deals.map((d) => {
       if (d.id !== id) return d;
@@ -281,6 +584,13 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
           const calculatedMargin = Math.round(((finalP - d.originalPrice) / d.originalPrice) * 100);
           newDeal.markupPercentage = calculatedMargin;
         }
+      }
+
+      // CRITICAL: If this is the O-Ring flyer from the PDF, re-render its graphic with the modified price!
+      if (newDeal.supplierSku === 'S1840' || newDeal.id === 'deal-oring-s1840' || newDeal.title.toLowerCase().includes('o-ring')) {
+        const label = newDeal.priceStampConfig?.badgeText || newDeal.discountLabel || 'PRECIO X BLISTER';
+        newDeal.imageUrl = generateOringFlyerDataUrl(newDeal.finalPrice, label);
+        newDeal.galleryUrls = [newDeal.imageUrl];
       }
 
       return newDeal;
@@ -706,17 +1016,30 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
                   </div>
                 </div>
 
-                {/* Quick actions: Sample Catalogs */}
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-[11px] text-slate-400">¿No tienes el archivo a mano?</span>
-                  <button
-                    onClick={() => loadSampleCatalog('cat-inova-tech-bazar')}
-                    disabled={isAnalyzing}
-                    className="text-xs font-bold text-indigo-400 hover:text-indigo-300 hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Cargar Catálogo Ejemplo Inova ARG</span>
-                  </button>
+                {/* Quick actions: Sample Catalogs & PDF Flyer */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-2 border-t border-slate-800/80">
+                  <span className="text-[11px] text-slate-400 font-medium">Acciones rápidas de folletos:</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={handleLoadOringFlyer}
+                      disabled={isAnalyzing}
+                      className="px-2.5 py-1 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-[11px] font-bold text-rose-300 flex items-center gap-1.5 cursor-pointer transition-colors"
+                      title="Cargar la imagen de folleto del PDF (Extractor O-Ring Set x 4 Piezas) para modificar precio"
+                    >
+                      <Flame className="w-3.5 h-3.5 text-rose-400" />
+                      <span>⚡ Folleto O-Ring S1840 (del PDF)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => loadSampleCatalog('cat-inova-tech-bazar')}
+                      disabled={isAnalyzing}
+                      className="text-xs font-bold text-indigo-400 hover:text-indigo-300 hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Catálogo Inova</span>
+                    </button>
+                  </div>
                 </div>
 
                 {isAnalyzing && (
@@ -923,23 +1246,31 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
                               )}
                             </button>
 
-                            <div className="w-16 h-16 rounded-xl bg-slate-900 overflow-hidden shrink-0 border border-slate-800 relative group">
+                            {/* Product Flyer Image */}
+                            <div
+                              onClick={() => setLightboxDeal(deal)}
+                              className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-slate-900 overflow-hidden shrink-0 border border-slate-700 hover:border-amber-400 relative group cursor-pointer transition-all shadow-md"
+                              title="Haz clic para ver la imagen completa del folleto en alta resolución"
+                            >
                               <img
                                 src={deal.imageUrl}
                                 alt={deal.title}
-                                className="w-full h-full object-cover"
+                                className="w-full h-full object-contain bg-slate-950 group-hover:scale-105 transition-transform duration-300"
                               />
-                              <span className="absolute bottom-1 right-1 text-[9px] font-black px-1.5 py-0.5 rounded-sm bg-slate-950/80 text-amber-300">
+                              <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <ZoomIn className="w-5 h-5 text-white drop-shadow-md" />
+                              </div>
+                              <span className="absolute bottom-1 right-1 text-[9px] font-black px-1.5 py-0.5 rounded-sm bg-slate-950/85 text-amber-300 border border-slate-800">
                                 Pág #{deal.pageNumber || 1}
                               </span>
                             </div>
 
-                            <div className="space-y-1 min-w-0 flex-1">
+                            <div className="space-y-1.5 min-w-0 flex-1">
                               <input
                                 type="text"
                                 value={deal.title}
                                 onChange={(e) => handleUpdateDealField(deal.id, 'title', e.target.value)}
-                                className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-lg px-2 py-1 text-xs font-bold text-white focus:outline-hidden"
+                                className="w-full bg-slate-900 border border-slate-800 focus:border-indigo-500 rounded-lg px-2.5 py-1 text-xs font-bold text-white focus:outline-hidden"
                                 placeholder="Título del producto"
                               />
                               <div className="flex items-center gap-2 flex-wrap">
@@ -963,11 +1294,47 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
                                   </span>
                                 )}
                               </div>
+
+                              {/* Action buttons directly on card */}
+                              <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenStampModal(deal)}
+                                  className="px-2 py-1 rounded-lg bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-[10px] font-extrabold text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Estampar o modificar el precio directamente sobre los píxeles de la imagen"
+                                >
+                                  <Palette className="w-3 h-3 text-rose-400" />
+                                  <span>🏷️ Estampar Precio</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    downloadDataUrlAsImage(
+                                      deal.imageUrl,
+                                      `folleto-${deal.supplierSku || 'oferta'}-${deal.finalPrice}.jpg`
+                                    )
+                                  }
+                                  className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Descargar este folleto en JPG con el precio modificado"
+                                >
+                                  <Download className="w-3 h-3 text-slate-400" />
+                                  <span>JPG</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setLightboxDeal(deal)}
+                                  className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] font-bold text-slate-300 flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Ampliar vista del folleto"
+                                >
+                                  <ZoomIn className="w-3 h-3 text-slate-400" />
+                                  <span>Ver</span>
+                                </button>
+                              </div>
                             </div>
                           </div>
 
-                          {/* Editable Cost & Markup % & Sale Price */}
-                          <div className="md:col-span-6 grid grid-cols-3 gap-3">
+                          {/* Editable Cost & Markup % & Sale Price + Quick Modifiers */}
+                          <div className="md:col-span-6 grid grid-cols-3 gap-2.5">
                             {/* Costo Mayorista ($) */}
                             <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
                               <label className="text-[10px] font-bold text-slate-400 block mb-1">
@@ -1019,12 +1386,63 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
                                 Antes: ${deal.regularPrice?.toLocaleString() || (deal.finalPrice * 1.35).toFixed(0)}
                               </span>
                             </div>
+
+                            {/* Quick Price Modifier Bar */}
+                            <div className="col-span-3 pt-1.5 flex items-center justify-between flex-wrap gap-1.5 border-t border-slate-900">
+                              <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                                <DollarSign className="w-3 h-3 text-emerald-400" />
+                                <span>Modificar Precio Rápido:</span>
+                              </span>
+                              <div className="flex items-center gap-1 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickAdjustPrice(deal.id, -1000)}
+                                  className="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 text-[10px] font-bold text-slate-300 border border-slate-800 cursor-pointer"
+                                  title="Restar $1.000 al precio de venta"
+                                >
+                                  -$1.000
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickAdjustPrice(deal.id, -500)}
+                                  className="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 text-[10px] font-bold text-slate-300 border border-slate-800 cursor-pointer"
+                                  title="Restar $500 al precio de venta"
+                                >
+                                  -$500
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickAdjustPrice(deal.id, 500)}
+                                  className="px-2 py-0.5 rounded-md bg-indigo-950 hover:bg-indigo-900 text-[10px] font-bold text-indigo-300 border border-indigo-800 cursor-pointer"
+                                  title="Sumar $500 al precio de venta"
+                                >
+                                  +$500
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickAdjustPrice(deal.id, 1000)}
+                                  className="px-2 py-0.5 rounded-md bg-emerald-950 hover:bg-emerald-900 text-[10px] font-bold text-emerald-300 border border-emerald-800 cursor-pointer"
+                                  title="Sumar $1.000 al precio de venta"
+                                >
+                                  +$1.000
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleQuickAdjustPrice(deal.id, 2000)}
+                                  className="px-2 py-0.5 rounded-md bg-amber-950 hover:bg-amber-900 text-[10px] font-bold text-amber-300 border border-amber-800 cursor-pointer"
+                                  title="Sumar $2.000 al precio de venta"
+                                >
+                                  +$2.000
+                                </button>
+                              </div>
+                            </div>
                           </div>
 
                           {/* Quick Actions: Stock & Link Live Sync & Delete */}
                           <div className="md:col-span-2 flex items-center justify-end gap-2">
                             {deal.supplierUrl && (
                               <button
+                                type="button"
                                 onClick={() => handleSyncDealCostFromLink(deal)}
                                 disabled={syncingSingleCostId === deal.id}
                                 title="Actualizar costo en vivo desde el enlace del proveedor"
@@ -1035,6 +1453,7 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
                             )}
 
                             <button
+                              type="button"
                               onClick={() => handleDeleteDeal(deal.id)}
                               title="Eliminar del catálogo"
                               className="p-2 bg-slate-900 hover:bg-rose-950/80 text-rose-400 rounded-xl border border-slate-800 hover:border-rose-800 transition-colors cursor-pointer"
@@ -1099,11 +1518,15 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
                     className="bg-slate-950 rounded-2xl border border-slate-800 hover:border-rose-500/60 overflow-hidden flex flex-col group transition-all duration-300 hover:shadow-xl hover:shadow-rose-950/20"
                   >
                     {/* Image Container with Badges */}
-                    <div className="relative aspect-square overflow-hidden bg-slate-900">
+                    <div
+                      onClick={() => setLightboxDeal(deal)}
+                      className="relative aspect-square overflow-hidden bg-slate-950 cursor-pointer"
+                      title="Haz clic para ver el folleto completo en alta resolución"
+                    >
                       <img
                         src={deal.imageUrl}
                         alt={deal.title}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                       />
                       <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 items-start">
                         <span className="bg-rose-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md shadow-md uppercase tracking-wider">
@@ -1279,6 +1702,363 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
           </div>
         )}
       </div>
+
+      {/* ================= MODAL 1: PRICE STAMPING & FLYER MODIFIER ================= */}
+      {stampingDeal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-4xl w-full p-5 sm:p-7 shadow-2xl text-slate-100 space-y-5 relative my-auto animate-in fade-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              <div className="space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 text-[11px] font-black uppercase tracking-wider">
+                  <Palette className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Estampador de Precio en Folleto</span>
+                </div>
+                <h3 className="text-xl font-black text-white">
+                  Modificar Precio en la Imagen del Folleto
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Aplica un badge 3D de alta definición que cubre y reemplaza el precio original del mayorista con tu nuevo precio de venta al público.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setStampingDeal(null)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: 2 Columns */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+              {/* Left Column: Image Preview with Stamped Price */}
+              <div className="md:col-span-7 space-y-3">
+                <div className="relative aspect-square max-h-[440px] bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center p-2 shadow-inner">
+                  {previewStampedUrl ? (
+                    <img
+                      src={previewStampedUrl}
+                      alt="Folleto con precio estampado"
+                      className="w-full h-full object-contain rounded-xl"
+                    />
+                  ) : (
+                    <div className="text-center text-xs text-slate-500 p-8">
+                      <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-indigo-400" />
+                      <span>Generando vista previa...</span>
+                    </div>
+                  )}
+
+                  {isStampingInProgress && (
+                    <div className="absolute top-4 left-4 bg-slate-950/90 text-amber-300 border border-amber-400/40 text-[10px] font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-md">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                      <span>Renderizando estampa...</span>
+                    </div>
+                  )}
+
+                  <div className="absolute bottom-4 right-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadDataUrlAsImage(
+                          previewStampedUrl || stampingDeal.imageUrl,
+                          `folleto-${stampingDeal.supplierSku || 'oferta'}-${stampPrice}.jpg`
+                        )
+                      }
+                      className="px-3 py-1.5 rounded-xl bg-slate-950/90 hover:bg-slate-900 border border-slate-700 text-xs font-bold text-white shadow-lg flex items-center gap-1.5 cursor-pointer backdrop-blur-xs"
+                      title="Descargar este folleto en JPG"
+                    >
+                      <Download className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Descargar JPG</span>
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400 text-center">
+                  💡 Este archivo JPG puede descargarse, enviarse por WhatsApp o publicarse directamente en tu tienda.
+                </p>
+              </div>
+
+              {/* Right Column: Customization Controls */}
+              <div className="md:col-span-5 space-y-4 bg-slate-950/60 p-4 rounded-2xl border border-slate-800">
+                {/* 1. Price Input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-emerald-400 block">
+                    1. Nuevo Precio de Venta ($ ARS):
+                  </label>
+                  <input
+                    type="number"
+                    value={stampPrice}
+                    onChange={(e) => setStampPrice(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-400 rounded-xl px-3 py-2 text-lg font-black text-emerald-300 focus:outline-hidden"
+                  />
+                  {/* Quick price chips */}
+                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setStampPrice((prev) => Math.max(0, prev - 1000))}
+                      className="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 text-[10px] font-bold text-slate-300 border border-slate-700 cursor-pointer"
+                    >
+                      -$1.000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStampPrice((prev) => Math.max(0, prev - 500))}
+                      className="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-slate-800 text-[10px] font-bold text-slate-300 border border-slate-700 cursor-pointer"
+                    >
+                      -$500
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStampPrice((prev) => prev + 500)}
+                      className="px-2 py-0.5 rounded-md bg-indigo-950 hover:bg-indigo-900 text-[10px] font-bold text-indigo-300 border border-indigo-800 cursor-pointer"
+                    >
+                      +$500
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStampPrice((prev) => prev + 1000)}
+                      className="px-2 py-0.5 rounded-md bg-emerald-950 hover:bg-emerald-900 text-[10px] font-bold text-emerald-300 border border-emerald-800 cursor-pointer"
+                    >
+                      +$1.000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStampPrice((prev) => prev + 2000)}
+                      className="px-2 py-0.5 rounded-md bg-amber-950 hover:bg-amber-900 text-[10px] font-bold text-amber-300 border border-amber-800 cursor-pointer"
+                    >
+                      +$2.000
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Badge Subtitle / Text */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    2. Texto del Encabezado del Badge:
+                  </label>
+                  <input
+                    type="text"
+                    value={stampText}
+                    onChange={(e) => setStampText(e.target.value)}
+                    placeholder="Ej: PRECIO X BLISTER, PRECIO OFERTA, SUPER OFERTA"
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-hidden"
+                  />
+                  <div className="flex items-center gap-1 flex-wrap pt-1">
+                    {['PRECIO X BLISTER', 'PRECIO OFERTA', 'SUPER OFERTA', 'HOT SALE', 'PROMOCIÓN'].map((txt) => (
+                      <button
+                        key={txt}
+                        type="button"
+                        onClick={() => setStampText(txt)}
+                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer transition-colors ${
+                          stampText === txt
+                            ? 'bg-rose-600 text-white'
+                            : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
+                      >
+                        {txt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Badge Position */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    3. Posición en el Folleto:
+                  </label>
+                  <select
+                    value={stampPosition}
+                    onChange={(e) => setStampPosition(e.target.value as any)}
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-hidden cursor-pointer"
+                  >
+                    <option value="bottom-right">Inferior Derecha (Estilo Folleto Mayorista)</option>
+                    <option value="bottom-center">Inferior Centro</option>
+                    <option value="bottom-left">Inferior Izquierda</option>
+                    <option value="top-right">Superior Derecha</option>
+                    <option value="top-left">Superior Izquierda</option>
+                  </select>
+                </div>
+
+                {/* 4. Badge Style */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    4. Estilo Visual del Badge:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setStampStyle('red-gold')}
+                      className={`p-2 rounded-xl text-xs font-bold text-left border cursor-pointer transition-all ${
+                        stampStyle === 'red-gold'
+                          ? 'bg-rose-950/80 border-rose-500 text-rose-200 shadow-md'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="block font-black text-rose-400">🔴 Rojo & Oro 3D</span>
+                      <span className="text-[10px] text-slate-400">Estilo flyer catálogo</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStampStyle('yellow-black')}
+                      className={`p-2 rounded-xl text-xs font-bold text-left border cursor-pointer transition-all ${
+                        stampStyle === 'yellow-black'
+                          ? 'bg-amber-950/80 border-amber-500 text-amber-200 shadow-md'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="block font-black text-amber-400">🟡 Amarillo & Negro</span>
+                      <span className="text-[10px] text-slate-400">Impacto ferretería</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStampStyle('dark-neon')}
+                      className={`p-2 rounded-xl text-xs font-bold text-left border cursor-pointer transition-all ${
+                        stampStyle === 'dark-neon'
+                          ? 'bg-emerald-950/80 border-emerald-500 text-emerald-200 shadow-md'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="block font-black text-emerald-400">🟢 Neón Oscuro</span>
+                      <span className="text-[10px] text-slate-400">Tecnología moderna</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStampStyle('blue-metal')}
+                      className={`p-2 rounded-xl text-xs font-bold text-left border cursor-pointer transition-all ${
+                        stampStyle === 'blue-metal'
+                          ? 'bg-blue-950/80 border-blue-500 text-blue-200 shadow-md'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <span className="block font-black text-blue-400">🔵 Azul Metálico</span>
+                      <span className="text-[10px] text-slate-400">Corporativo sobrio</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="pt-2 flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={handleApplyStampToDeal}
+                    className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Guardar y Aplicar a la Oferta</span>
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        downloadDataUrlAsImage(
+                          previewStampedUrl || stampingDeal.imageUrl,
+                          `folleto-${stampingDeal.supplierSku || 'oferta'}-${stampPrice}.jpg`
+                        )
+                      }
+                      className="py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Descargar JPG</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStampingDeal(null)}
+                      className="py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl text-xs font-bold cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL 2: LIGHTBOX / FULL FLYER VIEWER ================= */}
+      {lightboxDeal && (
+        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-3xl w-full p-5 sm:p-6 shadow-2xl text-slate-100 space-y-4 relative my-auto animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between gap-4 border-b border-slate-800 pb-3">
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-amber-400/20 text-amber-300 border border-amber-400/30 uppercase">
+                  Página #{lightboxDeal.pageNumber || 1} • {lightboxDeal.supplierSku || 'FOLLETO'}
+                </span>
+                <h3 className="text-base sm:text-lg font-black text-white line-clamp-1">
+                  {lightboxDeal.title}
+                </h3>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setLightboxDeal(null)}
+                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Flyer Image Container */}
+            <div className="max-h-[65vh] overflow-hidden rounded-2xl bg-black border border-slate-800 flex items-center justify-center p-2">
+              <img
+                src={lightboxDeal.imageUrl}
+                alt={lightboxDeal.title}
+                className="max-h-[60vh] w-auto object-contain rounded-xl"
+              />
+            </div>
+
+            {/* Footer with Price & Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+              <div className="flex items-baseline gap-2">
+                <span className="text-xs text-slate-400 font-bold">Precio de Venta:</span>
+                <span className="text-2xl font-black text-emerald-400">
+                  ${lightboxDeal.finalPrice.toLocaleString()}
+                </span>
+                {lightboxDeal.regularPrice && (
+                  <span className="text-xs text-slate-500 line-through">
+                    ${lightboxDeal.regularPrice.toLocaleString()}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const d = lightboxDeal;
+                    setLightboxDeal(null);
+                    handleOpenStampModal(d);
+                  }}
+                  className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-colors shadow-md"
+                >
+                  <Palette className="w-4 h-4" />
+                  <span>Estampar / Cambiar Precio</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    downloadDataUrlAsImage(
+                      lightboxDeal.imageUrl,
+                      `folleto-${lightboxDeal.supplierSku || 'oferta'}-${lightboxDeal.finalPrice}.jpg`
+                    )
+                  }
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Download className="w-4 h-4 text-emerald-400" />
+                  <span>Descargar JPG</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -33,15 +33,22 @@ import {
   Lock,
   Key,
   Flame,
-  FileText
+  FileText,
+  Camera,
+  Tag,
+  Image as ImageIcon,
+  FolderTree
 } from 'lucide-react';
 import { SuperOfertasModule } from './SuperOfertasModule';
+import { BannerManager } from './BannerManager';
+import { CategoryManager } from './CategoryManager';
 
 interface AdminPanelProps {
   onClose: () => void;
+  initialTab?: 'super_ofertas' | 'scraper' | 'inventory' | 'categories' | 'banners' | 'orders' | 'settings';
 }
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) => {
   const {
     products,
     orders,
@@ -61,12 +68,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
     markOrderAsPaid,
     generateMercadoPagoLink,
     syncProductCostFromLink,
-    syncAllProductCostsFromLinks
+    syncAllProductCostsFromLinks,
+    categories,
+    ensureCategoryExists,
+    banners
   } = useStore();
 
   const { adminEmail, changeAdminPassword, changeAdminEmail } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'settings' | 'super_ofertas'>('super_ofertas');
+  const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'settings' | 'super_ofertas' | 'categories' | 'banners'>(initialTab || 'super_ofertas');
+  const [editingImageItemId, setEditingImageItemId] = useState<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'company' | 'payments'>('password');
 
   // --- PASSWORD MANAGEMENT STATE ---
@@ -341,11 +352,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
     setIsImporting(true);
     setScrapeError(null);
     try {
-      const count = await addMultipleProducts([item]);
+      const assignedCat = await ensureCategoryExists(item.category || 'General');
+      const itemToSave = { ...item, category: assignedCat };
+      const count = await addMultipleProducts([itemToSave]);
       setImportedIds((prev) => [...prev, item.id]);
       confetti({ particleCount: 60, spread: 50, origin: { y: 0.6 } });
       setImportSuccessMessage(
-        `¡"${item.title.substring(0, 35)}..." se cargó con éxito a tu Tienda y al Inventario!`
+        `¡"${item.title.substring(0, 30)}..." se cargó con éxito y se agrupó en la categoría "${assignedCat}"!`
       );
     } catch (err: any) {
       setScrapeError('Error al cargar el producto: ' + (err.message || 'Error de persistencia'));
@@ -364,11 +377,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
     setIsImporting(true);
     setScrapeError(null);
     try {
-      const count = await addMultipleProducts(itemsToImport);
+      const preparedItems: Product[] = [];
+      const createdCategories = new Set<string>();
+      for (const item of itemsToImport) {
+        const assignedCat = await ensureCategoryExists(item.category || 'General');
+        createdCategories.add(assignedCat);
+        preparedItems.push({ ...item, category: assignedCat });
+      }
+
+      const count = await addMultipleProducts(preparedItems);
       setImportedIds((prev) => [...prev, ...itemsToImport.map((i) => i.id)]);
       confetti({ particleCount: 90, spread: 70, origin: { y: 0.5 } });
       setImportSuccessMessage(
-        `¡Éxito! Se cargaron ${count} producto(s) a la Tienda Pública y a tu Inventario en tiempo real.`
+        `¡Éxito! Se cargaron ${count} producto(s) a la Tienda y se agruparon en ${createdCategories.size} categoría(s): ${Array.from(createdCategories).join(', ')}.`
       );
     } catch (err: any) {
       setScrapeError('Error al importar productos: ' + (err.message || 'Error de persistencia'));
@@ -863,7 +884,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
             }`}
           >
             <Layers className="w-4 h-4" />
-            <span>Inventario & Márgenes ({products.length})</span>
+            <span>Inventario ({products.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('categories')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'categories'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-indigo-400'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <FolderTree className="w-4 h-4 text-emerald-400" />
+            <span>Categorías ({categories.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('banners')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'banners'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 ring-1 ring-indigo-400'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <ImageIcon className="w-4 h-4 text-amber-300" />
+            <span>Banners ({banners.length})</span>
           </button>
 
           <button
@@ -1178,22 +1223,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                             />
                           </div>
 
-                          {/* Thumbnail */}
-                          <div className="w-24 h-24 rounded-xl bg-slate-800 overflow-hidden shrink-0 border border-slate-700 relative">
-                            <img
-                              src={item.imageUrl}
-                              alt={item.title}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src =
-                                  'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
-                              }}
-                            />
-                            {isLoaded && (
-                              <span className="absolute top-1 right-1 bg-emerald-600 text-white p-0.5 rounded-full shadow-xs">
-                                <Check className="w-3 h-3" />
-                              </span>
-                            )}
+                          {/* Thumbnail & Image Change */}
+                          <div className="flex flex-col items-center gap-1.5 shrink-0">
+                            <div className="w-24 h-24 rounded-xl bg-slate-800 overflow-hidden shrink-0 border border-slate-700 relative">
+                              <img
+                                src={item.imageUrl}
+                                alt={item.title}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src =
+                                    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+                                }}
+                              />
+                              {isLoaded && (
+                                <span className="absolute top-1 right-1 bg-emerald-600 text-white p-0.5 rounded-full shadow-xs">
+                                  <Check className="w-3 h-3" />
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setEditingImageItemId(editingImageItemId === item.id ? null : item.id)}
+                              className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1 bg-slate-800/90 hover:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-700 cursor-pointer"
+                            >
+                              <Camera className="w-3 h-3" />
+                              <span>{editingImageItemId === item.id ? 'Cerrar Foto' : 'Cambiar Foto'}</span>
+                            </button>
                           </div>
 
                           {/* Details */}
@@ -1204,6 +1259,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                               onChange={(e) => handleUpdateScrapedItem(item.id, { title: e.target.value })}
                               className="w-full px-2 py-1 bg-slate-800/80 border border-slate-700 rounded-lg text-xs font-bold text-white focus:outline-hidden focus:border-indigo-500"
                             />
+
+                            {/* Category selector row */}
+                            <div className="flex flex-wrap items-center gap-2 bg-slate-950/70 p-1.5 rounded-xl border border-slate-800">
+                              <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
+                                <Tag className="w-3 h-3 text-indigo-400" /> Categoría:
+                              </span>
+                              <select
+                                value={item.category || 'General'}
+                                onChange={(e) => handleUpdateScrapedItem(item.id, { category: e.target.value })}
+                                className="bg-slate-900 border border-slate-700 text-xs text-white rounded-lg px-2 py-0.5 cursor-pointer max-w-[180px] font-bold"
+                              >
+                                {categories.map((c) => (
+                                  <option key={c.id} value={c.name}>
+                                    {c.icon} {c.name}
+                                  </option>
+                                ))}
+                                {!categories.some((c) => c.name.toLowerCase() === (item.category || '').toLowerCase()) && (
+                                  <option value={item.category}>✨ {item.category} (Nueva auto-detectada)</option>
+                                )}
+                              </select>
+                              <span className="text-[9px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded font-mono font-bold">
+                                Auto-creada & agrupada
+                              </span>
+                            </div>
 
                             <div className="grid grid-cols-3 gap-2 text-xs">
                               <div>
@@ -1251,6 +1330,91 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
                             </div>
                           </div>
                         </div>
+
+                        {/* Expandable Image Customizer / Fix for "no coincide la imagen" */}
+                        {editingImageItemId === item.id && (
+                          <div className="bg-slate-950 p-3 rounded-xl border border-indigo-900/60 space-y-2.5 animate-fade-in text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-white flex items-center gap-1.5">
+                                <Camera className="w-3.5 h-3.5 text-indigo-400" />
+                                Modificar Imagen del Producto (Solución si no coincide)
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setEditingImageItemId(null)}
+                                className="text-[10px] text-slate-400 hover:text-white"
+                              >
+                                ✕ Cerrar
+                              </button>
+                            </div>
+
+                            {/* Option 1: File Upload from Device */}
+                            <div>
+                              <label className="text-[11px] text-slate-300 block mb-1">
+                                📁 Subir foto desde tu computadora o celular:
+                              </label>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  const reader = new FileReader();
+                                  reader.onload = (event) => {
+                                    const base64 = event.target?.result as string;
+                                    if (base64) {
+                                      handleUpdateScrapedItem(item.id, {
+                                        imageUrl: base64,
+                                        galleryUrls: [base64, ...(item.galleryUrls || [])]
+                                      });
+                                    }
+                                  };
+                                  reader.readAsDataURL(file);
+                                }}
+                                className="w-full text-xs text-slate-300 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer"
+                              />
+                            </div>
+
+                            {/* Option 2: Paste direct Image URL */}
+                            <div>
+                              <label className="text-[11px] text-slate-300 block mb-1">
+                                🔗 O pegar enlace directo de imagen (JPG, PNG, WebP):
+                              </label>
+                              <input
+                                type="text"
+                                value={item.imageUrl}
+                                onChange={(e) => handleUpdateScrapedItem(item.id, { imageUrl: e.target.value.trim() })}
+                                placeholder="https://ejemplo.com/foto-producto.jpg"
+                                className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white font-mono"
+                              />
+                            </div>
+
+                            {/* Option 3: Select from page gallery if available */}
+                            {item.galleryUrls && item.galleryUrls.length > 1 && (
+                              <div>
+                                <span className="text-[11px] text-slate-300 block mb-1">
+                                  🖼️ O seleccionar entre otras fotos detectadas en la web:
+                                </span>
+                                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                                  {item.galleryUrls.map((imgUrl, gIdx) => (
+                                    <button
+                                      key={gIdx}
+                                      type="button"
+                                      onClick={() => handleUpdateScrapedItem(item.id, { imageUrl: imgUrl })}
+                                      className={`w-14 h-14 rounded-lg overflow-hidden shrink-0 border-2 transition-all cursor-pointer ${
+                                        item.imageUrl === imgUrl
+                                          ? 'border-indigo-500 ring-2 ring-indigo-400'
+                                          : 'border-slate-700 hover:border-slate-500'
+                                      }`}
+                                    >
+                                      <img src={imgUrl} alt="Opción" className="w-full h-full object-cover" />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {/* Individual Product Action Bar */}
                         <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-2">
@@ -2825,6 +2989,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose }) => {
         {activeTab === 'super_ofertas' && (
           <div className="space-y-6 animate-fade-in">
             <SuperOfertasModule />
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB 6: CATEGORÍAS & AGRUPACIÓN                              */}
+        {/* ============================================================ */}
+        {activeTab === 'categories' && (
+          <div className="space-y-6 animate-fade-in">
+            <CategoryManager
+              onFilterInventory={(catName) => {
+                setSelectedCategory(catName);
+                setActiveTab('inventory');
+              }}
+            />
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB 7: BANNERS DE PORTADA & MULTI-SLIDER                    */}
+        {/* ============================================================ */}
+        {activeTab === 'banners' && (
+          <div className="space-y-6 animate-fade-in">
+            <BannerManager />
           </div>
         )}
       </main>

@@ -272,7 +272,9 @@ export const extractDetailsFromSlugAndDomain = (targetUrl: string): SlugProductD
 
   const lowerText = (cleanedSlug + ' ' + pathname).toLowerCase();
 
-  // Curated recognition for specific popular products
+  const isFromInova = host.includes('inovaarg') || host.includes('inova');
+
+  // Curated recognition for specific popular products with real high-resolution images
   if (lowerText.includes('afilador') || lowerText.includes('cuchillo')) {
     return {
       title: 'Afilador de Cuchillos Profesional 3 en 1',
@@ -297,84 +299,131 @@ export const extractDetailsFromSlugAndDomain = (targetUrl: string): SlugProductD
       description: 'Lámpara velador recargable USB con diseño infantil Unicornio Labubu Capibara. Luz LED cálida y regulable con cuerpo de silicona suave al tacto y batería de larga duración.',
       estimatedCost: 3600,
       imageUrl: 'https://inovaarg.com/wp-content/uploads/2026/07/10-1.webp',
-      supplierName
+      supplierName: 'Inova ARG'
     };
   }
 
-  if (lowerText.includes('adaptador') && (lowerText.includes('viaje') || lowerText.includes('universal') || lowerText.includes('usb'))) {
+  if (lowerText.includes('adaptador') && (lowerText.includes('viaje') || lowerText.includes('universal') || lowerText.includes('viajero') || lowerText.includes('usb'))) {
     return {
       title: 'Adaptador Universal de Viaje con Puerto USB',
       category: 'Tecnología & Bazar',
-      description: 'Adaptador internacional todo en uno compatible con enchufes de más de 150 países (US, EU, UK, AU). Incluye puertos USB de carga rápida y protección contra sobretensión.',
+      description: 'Adaptador internacional todo en uno compatible con enchufes de más de 150 países (US, EU, UK, AU). Incluye clavijas retráctiles y protección contra sobretensión.',
       estimatedCost: 4200,
-      imageUrl: 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=800&q=80',
-      supplierName
+      imageUrl: 'https://inovaarg.com/wp-content/uploads/2026/02/adaptador-viajero.webp',
+      supplierName: 'Inova ARG'
     };
   }
 
   if (lowerText.includes('joyero') || lowerText.includes('alhajero') || lowerText.includes('organizador')) {
     return {
-      title: 'Joyero Premium 3 Niveles con Cerradura',
+      title: 'Joyero con Llave Ld-1030',
       category: 'Hogar & Organización',
-      description: 'Organizador y joyero multicompartimiento forrado en terciopelo suave. Acabado elegante con espejo interior y compartimentos modulares para anillos, collares y aros.',
-      estimatedCost: 8900,
-      imageUrl: 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=800&q=80',
-      supplierName
+      description: 'Organizador y joyero multicompartimiento forrado en terciopelo suave. Acabado elegante con llave de seguridad y compartimentos modulares para anillos, collares y aros.',
+      estimatedCost: 17550,
+      imageUrl: 'https://inovaarg.com/wp-content/uploads/2026/07/WhatsApp-Image-2026-07-10-at-6.22.13-PM-1.webp',
+      supplierName: 'Inova ARG'
     };
   }
 
-  if (lowerText.includes('auricular') || lowerText.includes('headphone') || lowerText.includes('bluetooth') || lowerText.includes('earbuds') || lowerText.includes('airpod')) {
+  if (lowerText.includes('compresor') || lowerText.includes('inflador')) {
+    return {
+      title: 'Compresor de Aire Portátil con Manómetro',
+      category: 'Herramientas',
+      description: 'Compresor e inflador eléctrico portátil de alta potencia para autos, motos, bicicletas y pelotas con manómetro de precisión.',
+      estimatedCost: 19500,
+      imageUrl: 'https://inovaarg.com/wp-content/uploads/2026/10/Inflador-portatil-con-manometro-analogico-2.png',
+      supplierName: 'Inova ARG'
+    };
+  }
+
+  if (lowerText.includes('carpa') || lowerText.includes('gazebo')) {
+    return {
+      title: 'Carpa Gazebo Plegable Oryx 3x3 Mts',
+      category: 'Camping & Jardín',
+      description: 'Carpa gazebo plegable reforzada impermeable de montaje rápido, ideal para eventos, jardín, playa y ferias.',
+      estimatedCost: 134850,
+      imageUrl: 'https://inovaarg.com/wp-content/uploads/2026/08/WhatsApp-Image-2026-08-28-at-6.16.35-PM-1.webp',
+      supplierName: 'Inova ARG'
+    };
+  }
+
+  if (lowerText.includes('espejo') && (lowerText.includes('led') || lowerText.includes('cosmetico'))) {
+    return {
+      title: 'Espejo Cosmético LED KM-64063',
+      category: 'Estética & Belleza',
+      description: 'Espejo cosmético táctil con aro de iluminación LED regulable y base organizadora de maquillaje.',
+      estimatedCost: 18600,
+      imageUrl: 'https://inovaarg.com/wp-content/uploads/2026/09/WhatsApp-Image-2026-09-01-at-10.50.31-AM.webp',
+      supplierName: 'Inova ARG'
+    };
+  }
+
+  if (lowerText.includes('guirnalda') || lowerText.includes('focos')) {
+    return {
+      title: 'Guirnalda 5M 10 Focos Multicolor POL-32',
+      category: 'Hogar & Iluminación',
+      description: 'Guirnalda decorativa de 5 metros con 10 focos LED multicolor de bajo consumo para iluminación de interiores, galerías y eventos.',
+      estimatedCost: 19500,
+      imageUrl: 'https://inovaarg.com/wp-content/uploads/2026/09/WhatsApp-Image-2026-09-16-at-4.38.06-PM-1.webp',
+      supplierName: 'Inova ARG'
+    };
+  }
+
+  if (lowerText.includes('caja') && lowerText.includes('plegable')) {
+    return {
+      title: 'Caja De Almacenamiento Plegable Con Tapa Oryx',
+      category: 'Hogar & Organización',
+      description: 'Caja organizadora modular plegable con tapa de fácil acceso, ruedas y asas laterales reforzadas.',
+      estimatedCost: 11500,
+      imageUrl: 'https://inovaarg.com/wp-content/uploads/2026/10/WhatsApp-Image-2026-10-13-at-10.50.57-AM-2.webp',
+      supplierName: 'Inova ARG'
+    };
+  }
+
+  if (lowerText.includes('auricular') || lowerText.includes('headphone') || lowerText.includes('bluetooth') || lowerText.includes('earbuds') || lowerText.includes('f9') || lowerText.includes('m25') || lowerText.includes('m88')) {
     const formattedTitle = cleanedSlug
       ? cleanedSlug.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-      : 'Auriculares Inalámbricos Bluetooth Pro';
+      : 'Auricular Inalámbrico F9 Bluetooth';
     return {
       title: formattedTitle,
       category: 'Tecnología & Audio',
-      description: 'Auriculares inalámbricos de alta fidelidad con cancelación de ruido ambiental, sonido estéreo envolvente y estuche de carga rápida.',
-      estimatedCost: 14500,
-      imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80',
+      description: 'Auriculares inalámbricos de alta fidelidad con cancelación de ruido ambiental, sonido estéreo envolvente y estuche de carga digital.',
+      estimatedCost: 8100,
+      imageUrl: isFromInova
+        ? 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'
+        : 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80',
       supplierName
     };
   }
 
-  if (lowerText.includes('reloj') || lowerText.includes('smartwatch') || lowerText.includes('band')) {
+  if (lowerText.includes('reloj') || lowerText.includes('smartwatch') || lowerText.includes('p9')) {
     const formattedTitle = cleanedSlug
       ? cleanedSlug.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-      : 'Smartwatch Deportivo Inteligente';
+      : 'Smartwatch + Auricular P9 + 7 Mallas';
     return {
       title: formattedTitle,
       category: 'Tecnología & Wearables',
-      description: 'Reloj inteligente con sensor cardíaco, medidor de oxígeno, podómetro, notificaciones de WhatsApp y llamadas con resistencia IP68.',
+      description: 'Combo Smartwatch multifunción con auriculares Bluetooth P9 y set de 7 mallas intercambiables para toda ocasión.',
       estimatedCost: 18500,
-      imageUrl: 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&w=800&q=80',
+      imageUrl: isFromInova
+        ? 'https://inovaarg.com/wp-content/uploads/2026/02/WhatsApp-Image-2025-09-17-at-10.58.17-AM-scaled-1.webp'
+        : 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&w=800&q=80',
       supplierName
     };
   }
 
-  if (lowerText.includes('lampara') || lowerText.includes('velador') || lowerText.includes('foco') || lowerText.includes('led') || lowerText.includes('luz')) {
+  if (lowerText.includes('lampara') || lowerText.includes('led') || lowerText.includes('luz')) {
     const formattedTitle = cleanedSlug
       ? cleanedSlug.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-      : 'Lámpara Velador LED de Noche';
+      : 'Lámpara LED Decorativa Recargable';
     return {
       title: formattedTitle,
       category: 'Hogar & Iluminación',
-      description: 'Lámpara de diseño moderno con iluminación cálida decorativa, bajo consumo energético y encendido táctil.',
-      estimatedCost: 5500,
-      imageUrl: 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=800&q=80',
-      supplierName
-    };
-  }
-
-  if (lowerText.includes('mochila') || lowerText.includes('bolso') || lowerText.includes('backpack')) {
-    const formattedTitle = cleanedSlug
-      ? cleanedSlug.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-      : 'Mochila Urbana Reforzada Antirrobo';
-    return {
-      title: formattedTitle,
-      category: 'Moda & Accesorios',
-      description: 'Mochila reforzada con compartimento acolchado para notebook de 15.6", puerto de carga USB exterior y tela impermeable.',
-      estimatedCost: 16500,
-      imageUrl: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?auto=format&fit=crop&w=800&q=80',
+      description: 'Lámpara de diseño moderno con iluminación LED cálida decorativa, bajo consumo energético y batería recargable.',
+      estimatedCost: 9500,
+      imageUrl: isFromInova
+        ? 'https://inovaarg.com/wp-content/uploads/2026/07/10-1.webp'
+        : 'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?auto=format&fit=crop&w=800&q=80',
       supplierName
     };
   }
@@ -382,29 +431,53 @@ export const extractDetailsFromSlugAndDomain = (targetUrl: string): SlugProductD
   // Format generic cleaned slug
   let title = cleanedSlug
     ? cleanedSlug.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-    : `Artículo Importado de ${supplierName}`;
+    : `Artículo de ${supplierName}`;
 
   return {
     title,
-    category: 'Importados',
-    description: `Artículo del catálogo de ${supplierName}. Listo para sincronizar costo mayorista y comercializar con margen calculado.`,
+    category: isFromInova ? 'Catálogo Inova' : 'Importados',
+    description: `Artículo del catálogo de ${supplierName}. Calidad verificada listo para comercializar con margen calculado.`,
     estimatedCost: 12000,
-    imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
+    imageUrl: isFromInova
+      ? 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'
+      : 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
     supplierName
   };
 };
 
-// Extract live cost from supplier product URL
+// Helper to clean WordPress scaled/resized images to full resolution
+export function cleanHighResImageUrl(imgUrl: string): string {
+  if (!imgUrl) return '';
+  return imgUrl.replace(/-\d+x\d+(\.(webp|jpg|jpeg|png))$/i, '$1');
+}
+
+// Extract live cost, image, category and details from supplier product URL
 export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
   cost: number;
-  title?: string;
+  originalPrice: number;
+  title: string;
+  description: string;
+  category: string;
+  imageUrl: string;
+  galleryUrls: string[];
   supplierName: string;
   inStock: boolean;
   source: 'live' | 'demo' | 'fallback';
 }> {
   const normUrl = normalizeUrl(targetUrl);
   if (!normUrl) {
-    return { cost: 0, supplierName: 'Desconocido', inStock: false, source: 'fallback' };
+    return {
+      cost: 0,
+      originalPrice: 0,
+      title: '',
+      description: '',
+      category: 'General',
+      imageUrl: '',
+      galleryUrls: [],
+      supplierName: 'Desconocido',
+      inStock: false,
+      source: 'fallback'
+    };
   }
 
   const url = normUrl;
@@ -419,9 +492,15 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     else if (lowerUrl.includes('cam')) demoCost = 15400;
     else if (lowerUrl.includes('sneaker')) demoCost = 28000;
     else if (lowerUrl.includes('afilador')) demoCost = 4500;
+    const slugData = extractDetailsFromSlugAndDomain(url);
     return {
       cost: demoCost,
-      title: 'Producto Demo',
+      originalPrice: demoCost,
+      title: slugData.title || 'Producto Demo',
+      description: slugData.description,
+      category: slugData.category,
+      imageUrl: slugData.imageUrl,
+      galleryUrls: [slugData.imageUrl],
       supplierName: 'Proveedor Demo',
       inStock: true,
       source: 'demo'
@@ -452,10 +531,14 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     const $ = cheerio.load(html);
 
     const supplierName = detectSupplierName(url, $);
+    const slugData = extractDetailsFromSlugAndDomain(url);
 
     let extractedCost = 0;
     let foundTitle = '';
+    let foundDesc = '';
     let inStock = true;
+    let foundImage = '';
+    const galleryCandidates: string[] = [];
 
     // Check Out of Stock indicators in text or classes
     const pageText = $('body').text().toLowerCase();
@@ -489,6 +572,19 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
             (Array.isArray(item['@type']) && item['@type'].includes('Product'))
           ) {
             if (item.name && !foundTitle) foundTitle = cleanPublicTitle(item.name);
+            if (item.description && !foundDesc) foundDesc = item.description;
+
+            // Product image from JSON-LD
+            let ldImg = Array.isArray(item.image)
+              ? item.image[0]
+              : typeof item.image === 'string'
+              ? item.image
+              : item.image?.url;
+            if (ldImg && !foundImage) {
+              foundImage = ldImg;
+              galleryCandidates.push(cleanHighResImageUrl(ldImg));
+            }
+
             const offers = Array.isArray(item.offers) ? item.offers[0] : item.offers;
             if (offers) {
               if (offers.availability && String(offers.availability).includes('OutOfStock')) {
@@ -564,7 +660,6 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     }
 
     // If title or cost is missing or generic (e.g. site name like Plutotec), enrich from slug heuristics
-    const slugData = extractDetailsFromSlugAndDomain(url);
     if (!foundTitle || foundTitle.toLowerCase() === 'plutotec' || foundTitle.toLowerCase().includes('iniciar sesión')) {
       foundTitle = slugData.title;
     }
@@ -572,9 +667,83 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
       extractedCost = slugData.estimatedCost;
     }
 
+    // Extract real image from WooCommerce / WoodMart gallery
+    const directGalleryLinks: string[] = [];
+    $('.woocommerce-product-gallery__image a, .product-image-wrap a').each((_, aEl) => {
+      const href = $(aEl).attr('href');
+      if (href && href.startsWith('http') && !directGalleryLinks.includes(href)) {
+        directGalleryLinks.push(cleanHighResImageUrl(href));
+      }
+    });
+
+    const galleryImgs: string[] = [];
+    $(
+      '.woocommerce-product-gallery__image img, .wp-post-image, img[data-large_image], .product-images img'
+    ).each((_, imgEl) => {
+      const src =
+        $(imgEl).attr('data-large_image') ||
+        $(imgEl).attr('src') ||
+        $(imgEl).attr('data-src') ||
+        $(imgEl).attr('data-lazy-src');
+      if (src && src.startsWith('http')) {
+        const clean = cleanHighResImageUrl(src);
+        if (!galleryImgs.includes(clean)) galleryImgs.push(clean);
+      }
+    });
+
+    const ogImg = $('meta[property="og:image"]').attr('content');
+    if (ogImg && ogImg.startsWith('http') && !galleryImgs.includes(cleanHighResImageUrl(ogImg))) {
+      galleryImgs.push(cleanHighResImageUrl(ogImg));
+    }
+
+    // Find best product image
+    foundImage =
+      directGalleryLinks[0] ||
+      galleryImgs[0] ||
+      foundImage ||
+      ogImg ||
+      slugData.imageUrl;
+
+    const allGalleries = Array.from(new Set([foundImage, ...directGalleryLinks, ...galleryImgs].filter(Boolean)));
+
+    // Extract exact category from breadcrumbs
+    let foundCategory = slugData.category;
+    const breadcrumbLinks = $(
+      '.wd-breadcrumbs .wd-last-link, .woocommerce-breadcrumb .wd-last-link, .woocommerce-breadcrumb a[href*="/c/"], .posted_in a, .breadcrumbs a, nav[aria-label="Breadcrumb"] a'
+    );
+    if (breadcrumbLinks.length > 0) {
+      const validCats: string[] = [];
+      breadcrumbLinks.each((_, el) => {
+        const text = $(el).text().trim();
+        const low = text.toLowerCase();
+        if (
+          text &&
+          !['inicio', 'home', 'tienda', 'shop', 'productos', 'catalogo', 'todos'].includes(low) &&
+          text.length < 40
+        ) {
+          validCats.push(text);
+        }
+      });
+      if (validCats.length > 0) {
+        foundCategory = validCats[validCats.length - 1];
+      }
+    }
+
+    if (!foundDesc) {
+      foundDesc =
+        $('.woocommerce-product-details__short-description').text().trim() ||
+        $('meta[property="og:description"]').attr('content') ||
+        slugData.description;
+    }
+
     return {
       cost: extractedCost,
+      originalPrice: extractedCost,
       title: foundTitle,
+      description: foundDesc.substring(0, 350) || slugData.description,
+      category: foundCategory || slugData.category,
+      imageUrl: foundImage,
+      galleryUrls: allGalleries.length > 0 ? allGalleries : [foundImage],
       supplierName: supplierName || slugData.supplierName,
       inStock,
       source: 'live'
@@ -584,7 +753,12 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     const slugData = extractDetailsFromSlugAndDomain(url);
     return {
       cost: slugData.estimatedCost,
+      originalPrice: slugData.estimatedCost,
       title: slugData.title,
+      description: slugData.description,
+      category: slugData.category,
+      imageUrl: slugData.imageUrl,
+      galleryUrls: [slugData.imageUrl],
       supplierName: slugData.supplierName,
       inStock: true,
       source: 'fallback'
@@ -778,11 +952,31 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
               const originalPrice = extractedCost;
               const finalPrice = Math.round(originalPrice * (1 + margin / 100));
 
+              // Check breadcrumbs for true category
+              let breadcrumbCat = '';
+              const bLinks = $(
+                '.wd-breadcrumbs .wd-last-link, .woocommerce-breadcrumb .wd-last-link, .woocommerce-breadcrumb a[href*="/c/"], .posted_in a, .breadcrumbs a'
+              );
+              if (bLinks.length > 0) {
+                const candidates: string[] = [];
+                bLinks.each((_, el) => {
+                  const t = $(el).text().trim();
+                  const low = t.toLowerCase();
+                  if (t && !['inicio', 'home', 'tienda', 'shop', 'productos', 'catalogo', 'todos'].includes(low) && t.length < 40) {
+                    candidates.push(t);
+                  }
+                });
+                if (candidates.length > 0) breadcrumbCat = candidates[candidates.length - 1];
+              }
+
               let image = Array.isArray(item.image)
                 ? item.image[0]
                 : typeof item.image === 'string'
                 ? item.image
                 : item.image?.url ||
+                  $('.woocommerce-product-gallery__image a').first().attr('href') ||
+                  $('.woocommerce-product-gallery__image img').first().attr('data-large_image') ||
+                  $('img.wp-post-image').first().attr('src') ||
                   $('meta[property="og:image"]').attr('content') ||
                   slugData.imageUrl;
 
@@ -792,9 +986,26 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
                 } catch {}
               }
 
+              if (image) {
+                image = cleanHighResImageUrl(image);
+              }
+
               if (isGenericImage(image)) {
                 image = slugData.imageUrl;
               }
+
+              const allLdGalleries: string[] = [];
+              if (image && !isGenericImage(image)) allLdGalleries.push(image);
+
+              $('.woocommerce-product-gallery__image a, .woocommerce-product-gallery__image img, img.wp-post-image, img[data-large_image]').each((_, el) => {
+                const candidate = $(el).attr('href') || $(el).attr('data-large_image') || $(el).attr('src') || $(el).attr('data-src');
+                if (candidate && candidate.startsWith('http')) {
+                  const cleaned = cleanHighResImageUrl(candidate);
+                  if (!isGenericImage(cleaned) && !allLdGalleries.includes(cleaned)) {
+                    allLdGalleries.push(cleaned);
+                  }
+                }
+              });
 
               let rawTitle = item.name || $('h1.product_title').text().trim() || $('title').text().trim();
               let cleanTitle = cleanPublicTitle(rawTitle);
@@ -809,9 +1020,9 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
                 originalPrice,
                 markupPercentage: margin,
                 finalPrice,
-                category: item.category || slugData.category,
+                category: breadcrumbCat || item.category || slugData.category,
                 imageUrl: image,
-                galleryUrls: Array.isArray(item.image) ? item.image : [image],
+                galleryUrls: allLdGalleries.length > 0 ? allLdGalleries : [image],
                 stock: 25,
                 supplierUrl: item.url || targetUrl,
                 supplierName: detectedSupplier || slugData.supplierName,
@@ -845,8 +1056,8 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
                     markupPercentage: margin,
                     finalPrice: finalP,
                     category: subItem.category || 'Catálogo',
-                    imageUrl: img,
-                    galleryUrls: [img],
+                    imageUrl: cleanHighResImageUrl(img),
+                    galleryUrls: [cleanHighResImageUrl(img)],
                     stock: 30,
                     supplierUrl: subItem.url || targetUrl,
                     supplierName: detectedSupplier,
@@ -894,6 +1105,7 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
                 img = new URL(img, targetUrl).toString();
               } catch {}
             }
+            if (img) img = cleanHighResImageUrl(img);
 
             const priceText = $(el)
               .find('.price ins .woocommerce-Price-amount, .price .woocommerce-Price-amount, .price')
@@ -913,10 +1125,10 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
               category: 'Catálogo',
               imageUrl:
                 img ||
-                'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
+                slugData.imageUrl,
               galleryUrls: [
                 img ||
-                  'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80'
+                  slugData.imageUrl
               ],
               stock: 25,
               supplierUrl: link || targetUrl,
@@ -950,10 +1162,12 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
           slugData.description;
 
         let ogImage =
+          $('.woocommerce-product-gallery__image a').first().attr('href') ||
+          $('.woocommerce-product-gallery__image img').first().attr('data-large_image') ||
           $('.woocommerce-product-gallery__image img').first().attr('src') ||
+          $('img.wp-post-image').first().attr('src') ||
           $('meta[property="og:image"]').attr('content') ||
           $('meta[name="twitter:image"]').attr('content') ||
-          $('img').first().attr('src') ||
           slugData.imageUrl;
 
         if (ogImage && !ogImage.startsWith('http')) {
@@ -962,8 +1176,60 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
           } catch {}
         }
 
+        if (ogImage) ogImage = cleanHighResImageUrl(ogImage);
+
         if (isGenericImage(ogImage)) {
           ogImage = slugData.imageUrl;
+        }
+
+        // Collect candidate gallery images for easy thumbnail selection
+        const galleryCandidates: string[] = [];
+        if (ogImage && !isGenericImage(ogImage)) galleryCandidates.push(ogImage);
+
+        $(
+          '.woocommerce-product-gallery__image a, .woocommerce-product-gallery__image img, .product-images img, .gallery-item img, img[data-large_image], img.wp-post-image, .slick-slide img'
+        ).each((_, el) => {
+          let src =
+            $(el).attr('href') ||
+            $(el).attr('data-large_image') ||
+            $(el).attr('src') ||
+            $(el).attr('data-src') ||
+            $(el).attr('data-lazy-src');
+          if (src && !src.startsWith('http')) {
+            try {
+              src = new URL(src, targetUrl).toString();
+            } catch {}
+          }
+          if (src) {
+            const cleaned = cleanHighResImageUrl(src);
+            if (!isGenericImage(cleaned) && !galleryCandidates.includes(cleaned)) {
+              galleryCandidates.push(cleaned);
+            }
+          }
+        });
+        if (galleryCandidates.length === 0) galleryCandidates.push(ogImage);
+
+        // Extract category from breadcrumbs or taxonomy
+        let extractedCategory = slugData.category;
+        const breadcrumbElements = $(
+          '.wd-breadcrumbs .wd-last-link, .woocommerce-breadcrumb .wd-last-link, .woocommerce-breadcrumb a[href*="/c/"], .posted_in a, .product_meta .posted_in a, .breadcrumbs a, .breadcrumb a, nav[aria-label="Breadcrumb"] a, .breadcrumb-item a, nav.breadcrumbs a, .breadcrumb_last'
+        );
+        if (breadcrumbElements.length > 0) {
+          const catCandidates: string[] = [];
+          breadcrumbElements.each((_, el) => {
+            const txt = $(el).text().trim();
+            const low = txt.toLowerCase();
+            if (
+              txt &&
+              !['inicio', 'home', 'tienda', 'shop', 'productos', 'catalogo', 'catalog', 'todos'].includes(low) &&
+              txt.length < 40
+            ) {
+              catCandidates.push(txt);
+            }
+          });
+          if (catCandidates.length > 0) {
+            extractedCategory = catCandidates[catCandidates.length - 1];
+          }
         }
 
         let extractedPrice = 0;
@@ -1009,9 +1275,9 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
           originalPrice: extractedPrice,
           markupPercentage: margin,
           finalPrice,
-          category: slugData.category,
+          category: extractedCategory || slugData.category,
           imageUrl: ogImage,
-          galleryUrls: [ogImage],
+          galleryUrls: galleryCandidates,
           stock: 25,
           supplierUrl: targetUrl,
           supplierName: detectedSupplier || slugData.supplierName,
@@ -1054,6 +1320,65 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
     } catch (scrapeErr: any) {
       console.warn('Live fetch failed or protected, using smart slug extractor:', scrapeErr.message);
 
+      // If target URL is on Inova ARG, attempt live search on inovaarg to retrieve exact active listing
+      if (targetUrl.includes('inovaarg') || targetUrl.includes('inova')) {
+        try {
+          const searchKeywords = (slugData.title || '').replace(/^(Inova|Proveedor)\s*/i, '').trim();
+          if (searchKeywords) {
+            const inovaSearchUrl = `https://inovaarg.com/?s=${encodeURIComponent(searchKeywords.split(' ').slice(0, 3).join(' '))}`;
+            const sRes = await fetch(inovaSearchUrl, {
+              headers: {
+                'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+              }
+            });
+            if (sRes.ok) {
+              const sHtml = await sRes.text();
+              const s$ = cheerio.load(sHtml);
+              const firstItem = s$('.product, .type-product, .wd-product').first();
+              if (firstItem.length > 0) {
+                const sTitle = firstItem.find('.woocommerce-loop-product__title, .wd-entities-title, h2, h3').first().text().trim();
+                let sImg =
+                  firstItem.find('img.wp-post-image, img').first().attr('src') ||
+                  firstItem.find('img').first().attr('data-src') ||
+                  slugData.imageUrl;
+                if (sImg) sImg = cleanHighResImageUrl(sImg);
+                const sPrice = parseArgentinePrice(firstItem.find('.price').first().text()) || slugData.estimatedCost || 12000;
+                const sLink = firstItem.find('a.product-image-link, a').first().attr('href') || targetUrl;
+
+                return res.json({
+                  success: true,
+                  source: 'inova_live_search',
+                  url: sLink,
+                  supplierName: 'Inova ARG',
+                  markupPercentage: margin,
+                  count: 1,
+                  products: [
+                    {
+                      id: `inova-search-${Date.now()}`,
+                      title: cleanPublicTitle(sTitle) || slugData.title,
+                      description: slugData.description,
+                      originalPrice: sPrice,
+                      markupPercentage: margin,
+                      finalPrice: Math.round(sPrice * (1 + margin / 100)),
+                      category: slugData.category,
+                      imageUrl: sImg,
+                      galleryUrls: [sImg],
+                      stock: 25,
+                      supplierUrl: sLink,
+                      supplierName: 'Inova ARG',
+                      inStock: true,
+                      featured: true
+                    }
+                  ]
+                });
+              }
+            }
+          }
+        } catch {}
+      }
+
       // Graceful instant extraction from URL slug and keywords
       const itemCost = slugData.estimatedCost > 0 ? slugData.estimatedCost : 12000;
       const finalPrice = Math.round(itemCost * (1 + margin / 100));
@@ -1087,7 +1412,6 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
     }
   } catch (error: any) {
     console.error('Scraper endpoint error:', error);
-    // Never send 500 error to user, return smart fallback product
     const targetUrl = normalizeUrl(req.body?.url || '');
     const margin = Number(req.body?.markupPercentage) || 35;
     const slugData = extractDetailsFromSlugAndDomain(targetUrl || 'https://inovaarg.com');
@@ -1159,6 +1483,10 @@ app.post('/api/sync-product-cost', async (req: Request, res: Response) => {
       diff,
       priceChanged,
       title: extracted.title || slugData.title,
+      description: extracted.description || slugData.description,
+      category: extracted.category || slugData.category,
+      imageUrl: extracted.imageUrl || slugData.imageUrl,
+      galleryUrls: extracted.galleryUrls || [extracted.imageUrl || slugData.imageUrl],
       supplierName: extracted.supplierName || slugData.supplierName,
       inStock: extracted.inStock,
       source: extracted.source,
@@ -1180,11 +1508,154 @@ app.post('/api/sync-product-cost', async (req: Request, res: Response) => {
       diff: 0,
       priceChanged: false,
       title: slugData.title,
+      description: slugData.description,
+      category: slugData.category,
+      imageUrl: slugData.imageUrl,
+      galleryUrls: [slugData.imageUrl],
       supplierName: slugData.supplierName,
       inStock: true,
       source: 'fallback',
       syncedAt: new Date().toISOString()
     });
+  }
+});
+
+// API Image Proxy to bypass hotlinking protection, CORS or Referer blocking for Inova ARG & other suppliers
+app.get('/api/image-proxy', async (req: Request, res: Response) => {
+  try {
+    const rawUrl = req.query.url as string;
+    if (!rawUrl || typeof rawUrl !== 'string') {
+      return res.status(400).send('URL requerida');
+    }
+
+    const targetUrl = rawUrl.trim();
+    if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
+      return res.status(400).send('URL inválida');
+    }
+
+    let referer = 'https://inovaarg.com/';
+    try {
+      referer = `${new URL(targetUrl).protocol}//${new URL(targetUrl).hostname}/`;
+    } catch {}
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+
+    const upstream = await fetch(targetUrl, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Referer': referer,
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+      }
+    });
+    clearTimeout(timeout);
+
+    if (!upstream.ok) {
+      return res.redirect(targetUrl);
+    }
+
+    const contentType = upstream.headers.get('content-type') || 'image/webp';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    const arrayBuffer = await upstream.arrayBuffer();
+    return res.send(Buffer.from(arrayBuffer));
+  } catch {
+    return res.redirect((req.query.url as string) || '');
+  }
+});
+
+// API Endpoint to search products directly on inovaarg.com live
+app.get('/api/inova-search', async (req: Request, res: Response) => {
+  try {
+    const q = ((req.query.q as string) || '').trim();
+    const margin = Number(req.query.margin) || 35;
+    const searchUrl = q ? `https://inovaarg.com/?s=${encodeURIComponent(q)}` : 'https://inovaarg.com/tienda/';
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 9500);
+
+    const upstream = await fetch(searchUrl, {
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'es-AR,es;q=0.9,en;q=0.8'
+      }
+    });
+    clearTimeout(timeout);
+
+    if (!upstream.ok) {
+      return res.status(502).json({ success: false, error: 'Inova ARG no disponible temporalmente' });
+    }
+
+    const html = await upstream.text();
+    const $ = cheerio.load(html);
+
+    const parsePrice = (raw: string): number => {
+      if (!raw) return 0;
+      const clean = raw.replace(/[^\d.,]/g, '').trim();
+      if (!clean) return 0;
+      let numStr = clean;
+      if (numStr.includes('.') && numStr.includes(',')) {
+        numStr = numStr.replace(/\./g, '').replace(',', '.');
+      } else if (numStr.includes('.')) {
+        numStr = numStr.replace(/\./g, '');
+      } else if (numStr.includes(',')) {
+        numStr = numStr.replace(',', '.');
+      }
+      return Math.round(parseFloat(numStr) || 0);
+    };
+
+    const results: any[] = [];
+    $('.product, .type-product, .wd-product').each((idx, el) => {
+      if (idx >= 20) return;
+      const title = $(el).find('.woocommerce-loop-product__title, .wd-entities-title, h2, h3').first().text().trim();
+      if (!title) return;
+
+      const link = $(el).find('a.product-image-link, a.woocommerce-LoopProduct-link, a').first().attr('href') || '';
+      let img =
+        $(el).find('img.wp-post-image, img').first().attr('src') ||
+        $(el).find('img').first().attr('data-src') ||
+        $(el).find('img').first().attr('data-lazy-src') || '';
+
+      if (img) img = cleanHighResImageUrl(img);
+
+      const priceText = $(el).find('.price ins .woocommerce-Price-amount, .price .woocommerce-Price-amount, .price').first().text().trim();
+      const cost = parsePrice(priceText) || 12000;
+      const finalPrice = Math.round(cost * (1 + margin / 100));
+
+      results.push({
+        id: `inova-${Date.now()}-${idx}`,
+        title: cleanPublicTitle(title),
+        description: `Artículo del catálogo mayorista Inova ARG. Calidad garantizada listo para comercializar.`,
+        originalPrice: cost,
+        markupPercentage: margin,
+        finalPrice,
+        category: 'Inova ARG',
+        imageUrl: img || 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp',
+        galleryUrls: [img || 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'],
+        stock: 25,
+        supplierUrl: link,
+        supplierName: 'Inova ARG',
+        inStock: true,
+        featured: idx < 2
+      });
+    });
+
+    return res.json({
+      success: true,
+      query: q,
+      count: results.length,
+      products: results
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
