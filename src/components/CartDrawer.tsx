@@ -1,6 +1,7 @@
 import React from 'react';
 import { useStore } from '../context/StoreContext';
 import { X, Trash2, ShoppingBag, ArrowRight, ShieldCheck, Plus, Minus, Truck } from 'lucide-react';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -103,8 +104,9 @@ export const CartDrawer: React.FC = () => {
                 >
                   {/* Thumbnail */}
                   <img
-                    src={item.product.imageUrl}
+                    src={resolveImageUrl(item.product.imageUrl)}
                     alt={item.product.title}
+                    referrerPolicy="no-referrer"
                     className="w-16 h-16 object-cover rounded-xl bg-white shrink-0 border border-gray-100"
                   />
 

@@ -536,6 +536,7 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     let extractedCost = 0;
     let foundTitle = '';
     let foundDesc = '';
+    let foundCategory = slugData.category;
     let inStock = true;
     let foundImage = '';
     const galleryCandidates: string[] = [];
@@ -550,6 +551,69 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     ) {
       if (!pageText.includes('hay existencias') && !pageText.includes('en stock')) {
         inStock = false;
+      }
+    }
+
+    // 0. Next.js App Router (RSC streaming payload) / Embedded JSON Product Data (Plutotec, Next.js, Tiendanube, Shopify)
+    let embeddedProduct: any = null;
+    try {
+      const unescaped = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      const pMatch = unescaped.match(/"product"\s*:\s*(\{(?:[^{}]|(?:\{[^{}]*\}))*\})/);
+      if (pMatch) {
+        const parsed = JSON.parse(pMatch[1]);
+        if (parsed && (parsed.name || parsed.title || parsed.price !== undefined)) {
+          embeddedProduct = parsed;
+        }
+      }
+
+      if (!embeddedProduct) {
+        const nextDataScript = $('script#__NEXT_DATA__').html();
+        if (nextDataScript) {
+          const nextJson = JSON.parse(nextDataScript);
+          const pProps = nextJson?.props?.pageProps;
+          if (pProps?.product) embeddedProduct = pProps.product;
+          else if (pProps?.item) embeddedProduct = pProps.item;
+        }
+      }
+
+      if (!embeddedProduct) {
+        const tnMatch = html.match(/LS\.product\s*=\s*(\{[\s\S]*?\});/);
+        if (tnMatch) {
+          try {
+            embeddedProduct = JSON.parse(tnMatch[1]);
+          } catch {}
+        }
+      }
+    } catch {}
+
+    if (embeddedProduct) {
+      if (embeddedProduct.name || embeddedProduct.title) {
+        foundTitle = cleanPublicTitle(embeddedProduct.name || embeddedProduct.title);
+      }
+      if (embeddedProduct.description || embeddedProduct.full_description) {
+        foundDesc = embeddedProduct.description || embeddedProduct.full_description;
+      }
+      if (embeddedProduct.price !== undefined || embeddedProduct.price_offer !== undefined) {
+        const p = Number(embeddedProduct.price_offer || embeddedProduct.price);
+        if (!isNaN(p) && p > 0) extractedCost = Math.round(p);
+      }
+      if (embeddedProduct.stock !== undefined) {
+        const s = Number(embeddedProduct.stock);
+        inStock = !isNaN(s) ? s > 0 : true;
+      }
+      if (embeddedProduct.category && typeof embeddedProduct.category === 'string') {
+        foundCategory = embeddedProduct.category.trim();
+      }
+      const embImg = embeddedProduct.image || (Array.isArray(embeddedProduct.images) && embeddedProduct.images[0]);
+      if (embImg && typeof embImg === 'string' && embImg.startsWith('http')) {
+        foundImage = embImg;
+        if (Array.isArray(embeddedProduct.images)) {
+          for (const g of embeddedProduct.images) {
+            if (typeof g === 'string' && g.startsWith('http') && !galleryCandidates.includes(g)) {
+              galleryCandidates.push(g);
+            }
+          }
+        }
       }
     }
 
@@ -697,19 +761,20 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     }
 
     // Find best product image
-    foundImage =
-      directGalleryLinks[0] ||
-      galleryImgs[0] ||
-      foundImage ||
-      ogImg ||
-      slugData.imageUrl;
+    if (!foundImage || (foundImage.includes('unsplash.com') && (directGalleryLinks[0] || galleryImgs[0]))) {
+      foundImage =
+        directGalleryLinks[0] ||
+        galleryImgs[0] ||
+        ogImg ||
+        slugData.imageUrl;
+    }
 
     const allGalleries = Array.from(new Set([foundImage, ...directGalleryLinks, ...galleryImgs].filter(Boolean)));
 
-    // Extract exact category from breadcrumbs
-    let foundCategory = slugData.category;
-    const breadcrumbLinks = $(
-      '.wd-breadcrumbs .wd-last-link, .woocommerce-breadcrumb .wd-last-link, .woocommerce-breadcrumb a[href*="/c/"], .posted_in a, .breadcrumbs a, nav[aria-label="Breadcrumb"] a'
+    // Extract exact category from breadcrumbs if not already found
+    if (!foundCategory || foundCategory === 'General' || foundCategory === 'Importados' || foundCategory.includes('Catálogo')) {
+      const breadcrumbLinks = $(
+      '.woocommerce-breadcrumb a, .wd-breadcrumbs a, a[href*="/c/"], .posted_in a, .breadcrumbs a, nav[aria-label="Breadcrumb"] a'
     );
     if (breadcrumbLinks.length > 0) {
       const validCats: string[] = [];
@@ -719,7 +784,8 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
         if (
           text &&
           !['inicio', 'home', 'tienda', 'shop', 'productos', 'catalogo', 'todos'].includes(low) &&
-          text.length < 40
+          text.length < 40 &&
+          text.toLowerCase() !== foundTitle.toLowerCase()
         ) {
           validCats.push(text);
         }
@@ -728,6 +794,7 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
         foundCategory = validCats[validCats.length - 1];
       }
     }
+  }
 
     if (!foundDesc) {
       foundDesc =
@@ -899,6 +966,139 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
           low.includes('placeholder')
         );
       };
+
+      // 0. Next.js App Router (RSC streaming payload) / Embedded JSON Product Data (Plutotec, Next.js, Tiendanube, Shopify)
+      let embeddedProduct: any = null;
+      try {
+        const unescaped = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        // A. Single product check: "product":{...}
+        const pMatch = unescaped.match(/"product"\s*:\s*(\{(?:[^{}]|(?:\{[^{}]*\}))*\})/);
+        if (pMatch) {
+          const parsed = JSON.parse(pMatch[1]);
+          if (parsed && (parsed.name || parsed.title || parsed.price !== undefined)) {
+            embeddedProduct = parsed;
+          }
+        }
+
+        // B. Next.js pageProps product check
+        if (!embeddedProduct) {
+          const nextDataScript = $('script#__NEXT_DATA__').html();
+          if (nextDataScript) {
+            const nextJson = JSON.parse(nextDataScript);
+            const pProps = nextJson?.props?.pageProps;
+            if (pProps?.product) embeddedProduct = pProps.product;
+            else if (pProps?.item) embeddedProduct = pProps.item;
+          }
+        }
+
+        // C. TiendaNube LS.product check
+        if (!embeddedProduct) {
+          const tnMatch = html.match(/LS\.product\s*=\s*(\{[\s\S]*?\});/);
+          if (tnMatch) {
+            try {
+              embeddedProduct = JSON.parse(tnMatch[1]);
+            } catch {}
+          }
+        }
+
+        // If a single embedded product was identified, construct it with exact supplier details
+        if (embeddedProduct && (embeddedProduct.name || embeddedProduct.title)) {
+          const rawPrice = Number(embeddedProduct.price_offer || embeddedProduct.price);
+          const cost = !isNaN(rawPrice) && rawPrice > 0 ? Math.round(rawPrice) : (slugData.estimatedCost || 12000);
+          const finalPrice = Math.round(cost * (1 + margin / 100));
+          const prodTitle = cleanPublicTitle(embeddedProduct.name || embeddedProduct.title);
+          const prodDesc = embeddedProduct.description || embeddedProduct.full_description || `Artículo original de ${detectedSupplier}.`;
+
+          let prodCat = (embeddedProduct.category || '').trim();
+          if (!prodCat) {
+            const urlParts = new URL(targetUrl).pathname.split('/').filter(Boolean);
+            const catIdx = urlParts.indexOf('categoria') !== -1 ? urlParts.indexOf('categoria') + 1 : -1;
+            if (catIdx !== -1 && urlParts[catIdx]) {
+              const rawSlugCat = urlParts[catIdx].replace(/-/g, ' ');
+              prodCat = rawSlugCat.charAt(0).toUpperCase() + rawSlugCat.slice(1);
+            } else {
+              prodCat = slugData.category;
+            }
+          }
+
+          const prodImg = embeddedProduct.image || (Array.isArray(embeddedProduct.images) && embeddedProduct.images[0]) || slugData.imageUrl;
+          const prodGalleries: string[] = [];
+          if (Array.isArray(embeddedProduct.images)) {
+            for (const imgUrl of embeddedProduct.images) {
+              if (typeof imgUrl === 'string' && imgUrl.startsWith('http') && !prodGalleries.includes(imgUrl)) {
+                prodGalleries.push(imgUrl);
+              }
+            }
+          }
+          if (prodGalleries.length === 0 && prodImg) prodGalleries.push(prodImg);
+
+          const stockNum = embeddedProduct.stock !== undefined ? Number(embeddedProduct.stock) : 25;
+          const inStock = embeddedProduct.stock !== undefined ? stockNum > 0 : true;
+
+          scrapedProducts.push({
+            id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            title: prodTitle || slugData.title,
+            description: prodDesc,
+            originalPrice: cost,
+            markupPercentage: margin,
+            finalPrice,
+            category: prodCat || 'General',
+            imageUrl: prodImg,
+            galleryUrls: prodGalleries,
+            stock: inStock ? (stockNum > 0 ? stockNum : 20) : 0,
+            supplierUrl: targetUrl,
+            supplierName: detectedSupplier || slugData.supplierName,
+            inStock,
+            featured: true
+          });
+        }
+
+        // D. Category / Catalog listing in Next.js RSC payload:
+        // Match arrays of products: {"id":...,"name":"...","price":...,"image":"...","category":"..."}
+        if (scrapedProducts.length === 0) {
+          const listRegex = /\{"id":(\d+),"name":"([^"]+)","price":([0-9.]+)(?:,"price_offer":([^,]*))?,"image":"([^"]+)"(?:,"images":\[([^\]]*)\])?,"category":"([^"]+)"(?:,"slug":"([^"]+)")?/g;
+          let listMatch;
+          let catProductCount = 0;
+          while ((listMatch = listRegex.exec(unescaped)) !== null && catProductCount < 40) {
+            catProductCount++;
+            const itemId = listMatch[1];
+            const itemName = cleanPublicTitle(listMatch[2]);
+            const itemPrice = listMatch[4] && listMatch[4] !== 'null' ? Number(listMatch[4]) : Number(listMatch[3]);
+            const itemImg = listMatch[5];
+            const itemCat = listMatch[7].trim();
+            const itemSlug = listMatch[8];
+            const itemCost = !isNaN(itemPrice) && itemPrice > 0 ? Math.round(itemPrice) : 12000;
+            const finalP = Math.round(itemCost * (1 + margin / 100));
+
+            let itemUrl = targetUrl;
+            if (itemSlug) {
+              try {
+                const u = new URL(targetUrl);
+                itemUrl = `${u.origin}/categoria/${itemCat.toLowerCase().replace(/\s+/g, '-')}/${itemSlug}`;
+              } catch {}
+            }
+
+            scrapedProducts.push({
+              id: `cat-${Date.now()}-${itemId}-${catProductCount}`,
+              title: itemName,
+              description: `Artículo del catálogo de ${detectedSupplier}.`,
+              originalPrice: itemCost,
+              markupPercentage: margin,
+              finalPrice: finalP,
+              category: itemCat || slugData.category,
+              imageUrl: itemImg,
+              galleryUrls: [itemImg],
+              stock: 30,
+              supplierUrl: itemUrl,
+              supplierName: detectedSupplier,
+              inStock: true,
+              featured: catProductCount < 4
+            });
+          }
+        }
+      } catch (err: any) {
+        console.warn('Error parsing Next.js RSC embedded payload:', err.message);
+      }
 
       // 1. Try parsing JSON-LD Schema.org Product data (including @graph structure)
       $('script[type="application/ld+json"]').each((_, elem) => {
@@ -1096,7 +1296,18 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
               } catch {}
             }
 
+            let loopCat = slugData.category;
+            const classAttr = $(el).attr('class') || '';
+            const catMatches = classAttr.match(/product_cat-([a-zA-Z0-9-]+)/g);
+            if (catMatches && catMatches.length > 0) {
+              const rawCat = catMatches[catMatches.length - 1].replace('product_cat-', '').replace(/-/g, ' ');
+              loopCat = rawCat.charAt(0).toUpperCase() + rawCat.slice(1);
+            }
+            const catLink = $(el).find('.wd-product-cats a, .posted_in a').first().text().trim();
+            if (catLink) loopCat = catLink;
+
             let img =
+              $(el).find('.wd-product-grid-slide').first().attr('data-image-url') ||
               $(el).find('img.wp-post-image, img').first().attr('src') ||
               $(el).find('img').first().attr('data-src') ||
               $(el).find('img').first().attr('data-lazy-src');
@@ -1106,6 +1317,16 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
               } catch {}
             }
             if (img) img = cleanHighResImageUrl(img);
+
+            const loopGalleries: string[] = [];
+            $(el).find('.wd-product-grid-slide').each((_, sEl) => {
+              const slideUrl = $(sEl).attr('data-image-url');
+              if (slideUrl) {
+                const cleaned = cleanHighResImageUrl(slideUrl);
+                if (!loopGalleries.includes(cleaned)) loopGalleries.push(cleaned);
+              }
+            });
+            if (img && !loopGalleries.includes(img)) loopGalleries.unshift(img);
 
             const priceText = $(el)
               .find('.price ins .woocommerce-Price-amount, .price .woocommerce-Price-amount, .price')
@@ -1122,14 +1343,11 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
               originalPrice,
               markupPercentage: margin,
               finalPrice,
-              category: 'Catálogo',
+              category: loopCat || slugData.category || 'Catálogo',
               imageUrl:
                 img ||
                 slugData.imageUrl,
-              galleryUrls: [
-                img ||
-                  slugData.imageUrl
-              ],
+              galleryUrls: loopGalleries.length > 0 ? loopGalleries : [img || slugData.imageUrl],
               stock: 25,
               supplierUrl: link || targetUrl,
               supplierName: detectedSupplier,
@@ -1520,6 +1738,53 @@ app.post('/api/sync-product-cost', async (req: Request, res: Response) => {
   }
 });
 
+// API Endpoint to fetch live Argentine Dollar exchange rates (Blue, Oficial, Tarjeta)
+app.get('/api/dollar-rate', async (_req: Request, res: Response) => {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+
+    let blueRate = 1555;
+    let oficialRate = 1020;
+    let source = 'live';
+
+    try {
+      const response = await fetch('https://dolarapi.com/v1/dolares/blue', {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.venta && Number(data.venta) > 0) {
+          blueRate = Math.round(Number(data.venta));
+        }
+      }
+    } catch {
+      source = 'fallback';
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    return res.json({
+      success: true,
+      blue: blueRate,
+      oficial: oficialRate,
+      rate: blueRate,
+      source,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    return res.json({
+      success: true,
+      blue: 1555,
+      oficial: 1020,
+      rate: 1555,
+      source: 'fallback',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // API Image Proxy to bypass hotlinking protection, CORS or Referer blocking for Inova ARG & other suppliers
 app.get('/api/image-proxy', async (req: Request, res: Response) => {
   try {
@@ -1541,7 +1806,7 @@ app.get('/api/image-proxy', async (req: Request, res: Response) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 12000);
 
-    const upstream = await fetch(targetUrl, {
+    let upstream = await fetch(targetUrl, {
       signal: controller.signal,
       headers: {
         'User-Agent':
@@ -1552,8 +1817,52 @@ app.get('/api/image-proxy', async (req: Request, res: Response) => {
     });
     clearTimeout(timeout);
 
+    // If 404, try variant without size suffix like -600x600 or without -scaled or vice versa
+    if (!upstream.ok && upstream.status === 404) {
+      const candidates: string[] = [];
+      if (targetUrl.includes('-scaled-1.')) {
+        candidates.push(targetUrl.replace('-scaled-1.', '.'));
+        candidates.push(targetUrl.replace('-scaled-1.', '-scaled.'));
+      }
+      if (targetUrl.includes('-scaled.')) {
+        candidates.push(targetUrl.replace('-scaled.', '.'));
+      }
+      if (targetUrl.match(/-\d+x\d+\.(webp|jpg|jpeg|png)$/i)) {
+        candidates.push(targetUrl.replace(/-\d+x\d+(\.(webp|jpg|jpeg|png))$/i, '$1'));
+      } else {
+        candidates.push(targetUrl.replace(/(\.(webp|jpg|jpeg|png))$/i, '-600x600$1'));
+      }
+
+      for (const altUrl of candidates) {
+        try {
+          const altRes = await fetch(altUrl, {
+            headers: {
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+              'Referer': referer,
+              'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+            }
+          });
+          if (altRes.ok) {
+            upstream = altRes;
+            break;
+          }
+        } catch {}
+      }
+    }
+
     if (!upstream.ok) {
-      return res.redirect(targetUrl);
+      // Sleek fallback SVG so the image tag never shows a broken icon
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" fill="none">
+          <rect width="400" height="400" fill="#0f172a"/>
+          <circle cx="200" cy="180" r="50" fill="#1e293b"/>
+          <path d="M185 170L200 155L215 170M200 155V195" stroke="#6366f1" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="200" y="260" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="14" font-weight="600">Inova ARG • Producto</text>
+        </svg>
+      `);
     }
 
     const contentType = upstream.headers.get('content-type') || 'image/webp';
@@ -1564,7 +1873,13 @@ app.get('/api/image-proxy', async (req: Request, res: Response) => {
     const arrayBuffer = await upstream.arrayBuffer();
     return res.send(Buffer.from(arrayBuffer));
   } catch {
-    return res.redirect((req.query.url as string) || '');
+    res.setHeader('Content-Type', 'image/svg+xml');
+    return res.send(`
+      <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" fill="none">
+        <rect width="400" height="400" fill="#0f172a"/>
+        <text x="200" y="210" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="14">Producto Inova ARG</text>
+      </svg>
+    `);
   }
 });
 
@@ -1619,16 +1934,42 @@ app.get('/api/inova-search', async (req: Request, res: Response) => {
       if (!title) return;
 
       const link = $(el).find('a.product-image-link, a.woocommerce-LoopProduct-link, a').first().attr('href') || '';
+      
+      // Extract slide images and main thumbnail
       let img =
+        $(el).find('.wd-product-grid-slide').first().attr('data-image-url') ||
         $(el).find('img.wp-post-image, img').first().attr('src') ||
         $(el).find('img').first().attr('data-src') ||
         $(el).find('img').first().attr('data-lazy-src') || '';
 
       if (img) img = cleanHighResImageUrl(img);
 
+      const slideGalleries: string[] = [];
+      $(el).find('.wd-product-grid-slide').each((_, sEl) => {
+        const u = $(sEl).attr('data-image-url');
+        if (u) {
+          const cleaned = cleanHighResImageUrl(u);
+          if (!slideGalleries.includes(cleaned)) slideGalleries.push(cleaned);
+        }
+      });
+      if (img && !slideGalleries.includes(img)) slideGalleries.unshift(img);
+
+      // Extract accurate category from classes or taxonomy
+      let itemCat = 'Inova ARG';
+      const classAttr = $(el).attr('class') || '';
+      const catMatches = classAttr.match(/product_cat-([a-zA-Z0-9-]+)/g);
+      if (catMatches && catMatches.length > 0) {
+        const rawCat = catMatches[catMatches.length - 1].replace('product_cat-', '').replace(/-/g, ' ');
+        itemCat = rawCat.charAt(0).toUpperCase() + rawCat.slice(1);
+      }
+      const catLink = $(el).find('.wd-product-cats a, .posted_in a').first().text().trim();
+      if (catLink) itemCat = catLink;
+
       const priceText = $(el).find('.price ins .woocommerce-Price-amount, .price .woocommerce-Price-amount, .price').first().text().trim();
       const cost = parsePrice(priceText) || 12000;
       const finalPrice = Math.round(cost * (1 + margin / 100));
+
+      const fallbackImg = 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp';
 
       results.push({
         id: `inova-${Date.now()}-${idx}`,
@@ -1637,9 +1978,9 @@ app.get('/api/inova-search', async (req: Request, res: Response) => {
         originalPrice: cost,
         markupPercentage: margin,
         finalPrice,
-        category: 'Inova ARG',
-        imageUrl: img || 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp',
-        galleryUrls: [img || 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'],
+        category: itemCat,
+        imageUrl: img || fallbackImg,
+        galleryUrls: slideGalleries.length > 0 ? slideGalleries : [img || fallbackImg],
         stock: 25,
         supplierUrl: link,
         supplierName: 'Inova ARG',

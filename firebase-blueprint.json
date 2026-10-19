@@ -9,6 +9,8 @@
         "title": { "type": "string", "maxLength": 250 },
         "description": { "type": "string", "maxLength": 5000 },
         "originalPrice": { "type": "number" },
+        "costCurrency": { "type": "string", "maxLength": 10 },
+        "costInUsd": { "type": "number" },
         "markupPercentage": { "type": "number" },
         "finalPrice": { "type": "number" },
         "category": { "type": "string", "maxLength": 100 },
@@ -32,6 +34,8 @@
         "customerEmail": { "type": "string", "maxLength": 150 },
         "customerPhone": { "type": "string", "maxLength": 50 },
         "customerAddress": { "type": "string", "maxLength": 300 },
+        "customerCity": { "type": "string", "maxLength": 120 },
+        "customerDniCuit": { "type": "string", "maxLength": 50 },
         "totalAmount": { "type": "number" },
         "paymentMethod": { "type": "string", "maxLength": 50 },
         "paymentStatus": { "type": "string", "maxLength": 50 },
@@ -39,6 +43,28 @@
         "createdAt": { "type": "string" }
       },
       "required": ["customerName", "customerEmail", "totalAmount", "paymentMethod", "orderStatus"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Registered buyer / seller client record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "maxLength": 150 },
+        "phone": { "type": "string", "maxLength": 50 },
+        "address": { "type": "string", "maxLength": 300 },
+        "city": { "type": "string", "maxLength": 120 },
+        "dniCuit": { "type": "string", "maxLength": 50 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "totalOrders": { "type": "number" },
+        "totalSpent": { "type": "number" },
+        "lastOrderId": { "type": "string", "maxLength": 100 },
+        "lastOrderDate": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["name", "email", "phone"]
     },
     "Settings": {
       "title": "Settings",
@@ -50,6 +76,7 @@
         "phone": { "type": "string", "maxLength": 50 },
         "whatsappNumber": { "type": "string", "maxLength": 50 },
         "defaultProfitMargin": { "type": "number" },
+        "usdExchangeRate": { "type": "number" },
         "bankName": { "type": "string", "maxLength": 100 },
         "bankCbuAlias": { "type": "string", "maxLength": 100 },
         "bankAccountHolder": { "type": "string", "maxLength": 150 },
@@ -67,9 +94,13 @@
       "schema": "Order",
       "description": "Orders placed by customers"
     },
+    "/clients/{clientId}": {
+      "schema": "Client",
+      "description": "Registered buyer and seller clients"
+    },
     "/settings/{settingsId}": {
       "schema": "Settings",
-      "description": "Company, margin and payment details"
+      "description": "Company, margin, dollar exchange rate and payment details"
     }
   }
 }

@@ -23,6 +23,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Registered clients / buyers directory
+    match /clients/{clientId} {
+      allow read, write: if true;
+    }
+
     // Store & payment settings
     match /settings/{settingId} {
       allow read, write: if true;

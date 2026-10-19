@@ -37,6 +37,7 @@ import { useStore } from '../context/StoreContext';
 import confetti from 'canvas-confetti';
 import { splitPdfToJpgPages, stampPriceOnFlyerImage, downloadDataUrlAsImage } from '../utils/pdfExtractor';
 import { generateOringFlyerDataUrl } from '../data/oringFlyerSvg';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 interface SuperOfertasModuleProps {
   onClose?: () => void;
@@ -1253,8 +1254,9 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
                               title="Haz clic para ver la imagen completa del folleto en alta resolución"
                             >
                               <img
-                                src={deal.imageUrl}
+                                src={resolveImageUrl(deal.imageUrl)}
                                 alt={deal.title}
+                                referrerPolicy="no-referrer"
                                 className="w-full h-full object-contain bg-slate-950 group-hover:scale-105 transition-transform duration-300"
                               />
                               <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -1524,8 +1526,9 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
                       title="Haz clic para ver el folleto completo en alta resolución"
                     >
                       <img
-                        src={deal.imageUrl}
+                        src={resolveImageUrl(deal.imageUrl)}
                         alt={deal.title}
+                        referrerPolicy="no-referrer"
                         className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                       />
                       <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 items-start">
@@ -2007,8 +2010,9 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
             {/* Flyer Image Container */}
             <div className="max-h-[65vh] overflow-hidden rounded-2xl bg-black border border-slate-800 flex items-center justify-center p-2">
               <img
-                src={lightboxDeal.imageUrl}
+                src={resolveImageUrl(lightboxDeal.imageUrl)}
                 alt={lightboxDeal.title}
+                referrerPolicy="no-referrer"
                 className="max-h-[60vh] w-auto object-contain rounded-xl"
               />
             </div>

@@ -37,11 +37,13 @@ import {
   Camera,
   Tag,
   Image as ImageIcon,
-  FolderTree
+  FolderTree,
+  ChevronDown
 } from 'lucide-react';
 import { SuperOfertasModule } from './SuperOfertasModule';
 import { BannerManager } from './BannerManager';
 import { CategoryManager } from './CategoryManager';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 interface AdminPanelProps {
   onClose: () => void;
@@ -128,7 +130,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
   const [selectedInventoryIds, setSelectedInventoryIds] = useState<string[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [isAssigningCategory, setIsAssigningCategory] = useState(false);
   const [inventoryNotification, setInventoryNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleBulkAssignCategory = async (newCategory: string) => {
+    if (!newCategory || selectedInventoryIds.length === 0) return;
+    setIsAssigningCategory(true);
+    try {
+      for (const id of selectedInventoryIds) {
+        await updateProduct(id, { category: newCategory });
+      }
+      setInventoryNotification({
+        type: 'success',
+        message: `¡Se asignó la categoría "${newCategory}" a ${selectedInventoryIds.length} productos seleccionados correctamente!`
+      });
+      setSelectedInventoryIds([]);
+    } catch (err: any) {
+      setInventoryNotification({
+        type: 'error',
+        message: 'Error al asignar la categoría a los productos seleccionados.'
+      });
+    } finally {
+      setIsAssigningCategory(false);
+    }
+  };
 
   // Cost Synchronization State
   const [isSyncingAllCosts, setIsSyncingAllCosts] = useState(false);
@@ -201,10 +226,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       ? cleanedSlug.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
       : `Artículo de ${supplierName}`;
 
-    let category = 'Hogar & Bazar';
+    const isFromInova = host.includes('inovaarg') || host.includes('inova');
+
+    let category = isFromInova ? 'Catálogo Inova' : 'Hogar & Bazar';
     let estimatedCost = 15000;
-    let imageUrl = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
-    let description = `Artículo importado de ${supplierName}. Calidad garantizada listo para comercializar con margen calculado.`;
+    let imageUrl = isFromInova
+      ? 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'
+      : 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+    let description = `Artículo del catálogo de ${supplierName}. Calidad verificada listo para comercializar con margen calculado.`;
 
     if (lower.includes('guirnalda') || lower.includes('focos') || lower.includes('foco')) {
       title = 'Guirnalda 5M 10 Focos Multicolor POL-32';
@@ -224,25 +253,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       estimatedCost = 3600;
       imageUrl = 'https://inovaarg.com/wp-content/uploads/2026/07/10-1.webp';
       description = 'Lámpara velador recargable USB con diseño infantil Unicornio Labubu Capibara. Luz LED cálida y regulable con cuerpo de silicona suave.';
-    } else if (lower.includes('adaptador') && (lower.includes('viaje') || lower.includes('universal'))) {
+    } else if (lower.includes('adaptador') && (lower.includes('viaje') || lower.includes('universal') || lower.includes('viajero') || lower.includes('usb'))) {
       title = 'Adaptador Universal de Viaje con Puerto USB';
       category = 'Tecnología & Bazar';
       estimatedCost = 4200;
-      imageUrl = 'https://images.unsplash.com/photo-1583863788434-e58a36330cf0?auto=format&fit=crop&w=800&q=80';
-      description = 'Adaptador universal de viaje todo en uno compatible con más de 150 países y puertos USB de carga rápida.';
-    } else if (lower.includes('joyero') || lower.includes('organizador')) {
-      title = 'Joyero Premium 3 Niveles con Cerradura';
-      category = 'Hogar & Organización';
-      estimatedCost = 8900;
-      imageUrl = 'https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?auto=format&fit=crop&w=800&q=80';
-    } else if (lower.includes('auricular') || lower.includes('headphone') || lower.includes('audio')) {
-      category = 'Audio & Tecnología';
-      estimatedCost = 14500;
-      imageUrl = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80';
-    } else if (lower.includes('reloj') || lower.includes('smartwatch')) {
-      category = 'Tecnología & Wearables';
+      imageUrl = 'https://inovaarg.com/wp-content/uploads/2026/02/adaptador-viajero.webp';
+      description = 'Adaptador universal de viaje todo en uno compatible con más de 150 países y clavijas retráctiles de carga rápida.';
+    } else if (lower.includes('joyero') || lower.includes('organizador') || lower.includes('alhajero')) {
+      title = 'Joyero con Llave Ld-1030';
+      category = 'Joyeros & Estética';
+      estimatedCost = 17550;
+      imageUrl = 'https://inovaarg.com/wp-content/uploads/2026/07/WhatsApp-Image-2026-07-10-at-6.22.13-PM-1.webp';
+      description = 'Organizador y joyero multicompartimiento forrado en terciopelo suave con cerradura de seguridad y compartimentos modulares.';
+    } else if (lower.includes('compresor') || lower.includes('inflador')) {
+      title = 'Compresor de Aire Portátil con Manómetro';
+      category = 'Herramientas';
+      estimatedCost = 19500;
+      imageUrl = 'https://inovaarg.com/wp-content/uploads/2026/10/Inflador-portatil-con-manometro-analogico-2.png';
+      description = 'Compresor e inflador eléctrico portátil de alta potencia para autos, motos, bicicletas y pelotas con manómetro de precisión.';
+    } else if (lower.includes('carpa') || lower.includes('gazebo')) {
+      title = 'Carpa Gazebo Plegable Oryx 3x3 Mts';
+      category = 'Camping & Jardín';
+      estimatedCost = 134850;
+      imageUrl = 'https://inovaarg.com/wp-content/uploads/2026/08/WhatsApp-Image-2026-08-28-at-6.16.35-PM-1.webp';
+      description = 'Carpa gazebo plegable reforzada impermeable de montaje rápido para eventos y jardín.';
+    } else if (lower.includes('espejo')) {
+      title = 'Espejo Cosmético LED KM-64063';
+      category = 'Estética & Belleza';
+      estimatedCost = 18600;
+      imageUrl = 'https://inovaarg.com/wp-content/uploads/2026/09/WhatsApp-Image-2026-09-01-at-10.50.31-AM.webp';
+      description = 'Espejo cosmético táctil con aro de iluminación LED regulable y base organizadora de maquillaje.';
+    } else if (lower.includes('auricular') || lower.includes('headphone') || lower.includes('audio') || lower.includes('f9') || lower.includes('m25')) {
+      title = 'Auricular Inalámbrico F9 Bluetooth';
+      category = 'Auriculares';
+      estimatedCost = 8100;
+      imageUrl = isFromInova
+        ? 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'
+        : 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=800&q=80';
+      description = 'Auriculares inalámbricos de alta fidelidad con cancelación de ruido ambiental, sonido estéreo y estuche de carga digital.';
+    } else if (lower.includes('reloj') || lower.includes('smartwatch') || lower.includes('p9')) {
+      title = 'Smartwatch + Auricular P9 + 7 Mallas';
+      category = 'Relojes & Tecnología';
       estimatedCost = 18500;
-      imageUrl = 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&w=800&q=80';
+      imageUrl = isFromInova
+        ? 'https://inovaarg.com/wp-content/uploads/2026/02/WhatsApp-Image-2025-09-17-at-10.58.17-AM-scaled-1.webp'
+        : 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?auto=format&fit=crop&w=800&q=80';
+      description = 'Combo Smartwatch multifunción con auriculares Bluetooth P9 y set de 7 mallas intercambiables.';
     }
 
     const finalPrice = Math.round(estimatedCost * (1 + margin / 100));
@@ -328,6 +384,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       setSelectedScrapedIds([fallbackItem.id]);
     } finally {
       setIsScraping(false);
+    }
+  };
+
+  // --- INOVA ARG DIRECT LIVE SEARCH ---
+  const [inovaSearchQuery, setInovaSearchQuery] = useState('');
+  const [isInovaSearching, setIsInovaSearching] = useState(false);
+
+  const handleInovaLiveSearch = async (term?: string) => {
+    const q = (term !== undefined ? term : inovaSearchQuery).trim();
+    setIsInovaSearching(true);
+    setScrapeError(null);
+    setImportSuccessMessage(null);
+    const margin = Number(markupPercent) || 35;
+    try {
+      const res = await fetch(`/api/inova-search?q=${encodeURIComponent(q)}&margin=${margin}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.products) && data.products.length > 0) {
+        setScrapedItems(data.products);
+        setSelectedScrapedIds(data.products.map((p: any) => p.id));
+        setImportSuccessMessage(`¡Se cargaron ${data.products.length} productos con fotos originales de Inova ARG listos para importar!`);
+      } else {
+        setScrapeError(`No se encontraron productos en Inova ARG para "${q}". Intenta con auriculares, velador, joyero, inflador, etc.`);
+      }
+    } catch {
+      setScrapeError('No se pudo conectar con el catálogo de Inova ARG en este momento.');
+    } finally {
+      setIsInovaSearching(false);
     }
   };
 
@@ -593,15 +676,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
       setNewProduct((prev) => ({
         ...prev,
-        originalPrice: data.originalPrice || data.cost,
-        finalPrice: data.finalPrice,
+        title: data.title || prev.title,
+        description: data.description || prev.description,
+        originalPrice: data.originalPrice || data.cost || prev.originalPrice,
+        finalPrice: data.finalPrice || Math.round((data.originalPrice || data.cost || prev.originalPrice) * (1 + (newProduct.markupPercentage || 40) / 100)),
         supplierName: data.supplierName || prev.supplierName,
-        title: prev.title || data.title || prev.title
+        category: data.category || prev.category,
+        imageUrl: data.imageUrl || prev.imageUrl
       }));
 
       setInventoryNotification({
         type: 'success',
-        message: `¡Costo extraído con éxito! Proveedor: ${data.supplierName} | Costo: ${formatCurrency(data.originalPrice || data.cost)} | Venta: ${formatCurrency(data.finalPrice)}`
+        message: `¡Datos e imagen extraídos con éxito! ${data.title ? `"${data.title.substring(0, 25)}..."` : ''} | Costo: ${formatCurrency(data.originalPrice || data.cost)} | Categoría: ${data.category || 'General'}`
       });
       setTimeout(() => setInventoryNotification(null), 4000);
     } catch (err: any) {
@@ -618,16 +704,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
   const handleSaveProductEdit = async () => {
     if (!editingProduct) return;
     try {
+      const assignedCat = await ensureCategoryExists(editingProduct.category || 'General');
       const finalPrice = Math.round(
         editingProduct.originalPrice * (1 + editingProduct.markupPercentage / 100)
       );
       await updateProduct(editingProduct.id, {
         ...editingProduct,
+        category: assignedCat,
         finalPrice
       });
       setInventoryNotification({
         type: 'success',
-        message: `Producto "${editingProduct.title}" actualizado con éxito.`
+        message: `Producto "${editingProduct.title}" actualizado con éxito en la categoría "${assignedCat}".`
       });
       setTimeout(() => setInventoryNotification(null), 3000);
       setEditingProduct(null);
@@ -652,14 +740,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       newProduct.originalPrice * (1 + newProduct.markupPercentage / 100)
     );
     try {
+      const assignedCat = await ensureCategoryExists(newProduct.category || 'General');
       await addProduct({
         ...newProduct,
+        category: assignedCat,
         finalPrice
       });
       setIsNewProductModalOpen(false);
       setInventoryNotification({
         type: 'success',
-        message: `Nuevo producto "${newProduct.title}" agregado al catálogo con éxito.`
+        message: `Nuevo producto "${newProduct.title}" agregado al catálogo con éxito y agrupado en "${assignedCat}".`
       });
       setTimeout(() => setInventoryNotification(null), 3000);
       setNewProduct({
@@ -1007,64 +1097,169 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                 </button>
               </div>
 
-              {/* Quick Preset Buttons for 1-click Test */}
-              <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-slate-400 font-semibold">Enlaces de Prueba Rápida:</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const testUrl = 'https://inovaarg.com/producto/velador-unicornio-lububu-capibara-356-h';
-                    setScrapeUrl(testUrl);
-                    handleScrape(testUrl);
-                  }}
-                  className="px-3 py-1.5 bg-indigo-950/70 hover:bg-indigo-900/90 border border-indigo-700/60 rounded-xl text-indigo-200 font-medium transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>🦄 Inova ARG: Velador Unicornio Labubu ($3.600)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const testUrl = 'https://inovaarg.com/producto/guirnalda-5m-10-focos-multicolor-pol-32';
-                    setScrapeUrl(testUrl);
-                    handleScrape(testUrl);
-                  }}
-                  className="px-3 py-1.5 bg-sky-950/70 hover:bg-sky-900/90 border border-sky-700/60 rounded-xl text-sky-200 font-medium transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>💡 Inova ARG: Guirnalda 5M 10 Focos ($19.500)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const testUrl = 'https://www.plutotec.com.ar/categoria/bazar/afilador-de-cuchillos';
-                    setScrapeUrl(testUrl);
-                    handleScrape(testUrl);
-                  }}
-                  className="px-3 py-1.5 bg-amber-950/70 hover:bg-amber-900/90 border border-amber-700/60 rounded-xl text-amber-200 font-medium transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>🔪 Plutotec: Afilador de Cuchillos ($4.500)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const testUrl = 'https://inovaarg.com/producto/adaptador-universal-viaje-con-usb/';
-                    setScrapeUrl(testUrl);
-                    handleScrape(testUrl);
-                  }}
-                  className="px-3 py-1.5 bg-emerald-950/70 hover:bg-emerald-900/90 border border-emerald-700/60 rounded-xl text-emerald-200 font-medium transition-colors cursor-pointer flex items-center gap-1.5"
-                >
-                  <span>🔌 Inova ARG: Adaptador Universal ($4.200)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const demoUrl = 'https://demo-supplier.com/gadgets-catalog';
-                    setScrapeUrl(demoUrl);
-                    handleScrape(demoUrl);
-                  }}
-                  className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-xl text-slate-300 font-medium transition-colors cursor-pointer"
-                >
-                  ⚡ Catálogo Tech Demo
-                </button>
+              {/* Dedicated Inova ARG Live Catalog Explorer */}
+              <div className="pt-3 border-t border-slate-800 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-xs text-indigo-300 font-extrabold">
+                    <span className="p-1 rounded-md bg-indigo-950/80 text-indigo-400">🛍️</span>
+                    <span>Explorador en Vivo de Inova ARG (Con Fotos Reales y Costos Mayoristas):</span>
+                  </div>
+                  <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full font-mono font-bold">
+                    ✓ Fotos directas sin bloqueos
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex-1 relative">
+                    <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Buscar en Inova ARG: ej. auriculares, velador, joyero, inflador, espejo, carpa..."
+                      value={inovaSearchQuery}
+                      onChange={(e) => setInovaSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleInovaLiveSearch();
+                      }}
+                      className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-indigo-900/60 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500 font-medium"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleInovaLiveSearch()}
+                    disabled={isInovaSearching}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    {isInovaSearching ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Buscando en Inova...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-3.5 h-3.5" />
+                        <span>Buscar en Inova</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Inova ARG Quick Categories Chips */}
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="text-slate-400 font-bold text-[10px]">Categorías Inova:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleInovaLiveSearch('auricular')}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg cursor-pointer transition-colors"
+                  >
+                    🎧 Auriculares
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInovaLiveSearch('iluminacion')}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg cursor-pointer transition-colors"
+                  >
+                    💡 Iluminación
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInovaLiveSearch('herramientas')}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg cursor-pointer transition-colors"
+                  >
+                    🔧 Herramientas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInovaLiveSearch('joyero')}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg cursor-pointer transition-colors"
+                  >
+                    💎 Joyeros & Estética
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInovaLiveSearch('cargador')}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg cursor-pointer transition-colors"
+                  >
+                    🔌 Cargadores
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleInovaLiveSearch('espejo')}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg cursor-pointer transition-colors"
+                  >
+                    🪞 Espejos LED
+                  </button>
+                </div>
+
+                {/* Verified 1-click active test links from Inova ARG */}
+                <div className="pt-2 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="text-slate-400 font-semibold text-[11px]">Productos de Prueba Verificados:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const testUrl = 'https://inovaarg.com/producto/auricular-inalambrico-f9/';
+                      setScrapeUrl(testUrl);
+                      handleScrape(testUrl);
+                    }}
+                    className="px-2.5 py-1 bg-indigo-950/70 hover:bg-indigo-900/90 border border-indigo-700/60 rounded-xl text-indigo-200 font-medium transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>🎧 Inova: Auricular F9 ($6.700)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const testUrl = 'https://inovaarg.com/producto/adaptador-universal-viajero/';
+                      setScrapeUrl(testUrl);
+                      handleScrape(testUrl);
+                    }}
+                    className="px-2.5 py-1 bg-emerald-950/70 hover:bg-emerald-900/90 border border-emerald-700/60 rounded-xl text-emerald-200 font-medium transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>🔌 Inova: Adaptador Viajero ($4.200)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const testUrl = 'https://inovaarg.com/producto/compresor-de-aire-portatil/';
+                      setScrapeUrl(testUrl);
+                      handleScrape(testUrl);
+                    }}
+                    className="px-2.5 py-1 bg-blue-950/70 hover:bg-blue-900/90 border border-blue-700/60 rounded-xl text-blue-200 font-medium transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>🔧 Inova: Compresor Portátil ($19.500)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const testUrl = 'https://inovaarg.com/producto/joyero-con-llave-ld-1030/';
+                      setScrapeUrl(testUrl);
+                      handleScrape(testUrl);
+                    }}
+                    className="px-2.5 py-1 bg-purple-950/70 hover:bg-purple-900/90 border border-purple-700/60 rounded-xl text-purple-200 font-medium transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>💎 Inova: Joyero con Llave ($17.550)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const testUrl = 'https://inovaarg.com/producto/velador-unicornio-lububu-capibara-356-h';
+                      setScrapeUrl(testUrl);
+                      handleScrape(testUrl);
+                    }}
+                    className="px-2.5 py-1 bg-pink-950/70 hover:bg-pink-900/90 border border-pink-700/60 rounded-xl text-pink-200 font-medium transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>🦄 Inova: Velador Unicornio ($3.600)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const testUrl = 'https://inovaarg.com/producto/guirnalda-5m-10-focos-multicolor-pol-32/';
+                      setScrapeUrl(testUrl);
+                      handleScrape(testUrl);
+                    }}
+                    className="px-2.5 py-1 bg-sky-950/70 hover:bg-sky-900/90 border border-sky-700/60 rounded-xl text-sky-200 font-medium transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <span>💡 Inova: Guirnalda 10 Focos ($19.500)</span>
+                  </button>
+                </div>
               </div>
 
               {/* Error Alert */}
@@ -1227,12 +1422,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                           <div className="flex flex-col items-center gap-1.5 shrink-0">
                             <div className="w-24 h-24 rounded-xl bg-slate-800 overflow-hidden shrink-0 border border-slate-700 relative">
                               <img
-                                src={item.imageUrl}
+                                src={resolveImageUrl(item.imageUrl)}
                                 alt={item.title}
+                                referrerPolicy="no-referrer"
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
-                                  (e.target as HTMLImageElement).src =
-                                    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+                                  const target = e.target as HTMLImageElement;
+                                  if (item.imageUrl && !target.src.includes('/api/image-proxy')) {
+                                    target.src = `/api/image-proxy?url=${encodeURIComponent(item.imageUrl)}`;
+                                  } else {
+                                    target.src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+                                  }
                                 }}
                               />
                               {isLoaded && (
@@ -1407,7 +1607,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                                           : 'border-slate-700 hover:border-slate-500'
                                       }`}
                                     >
-                                      <img src={imgUrl} alt="Opción" className="w-full h-full object-cover" />
+                                      <img
+                                        src={resolveImageUrl(imgUrl)}
+                                        alt="Opción"
+                                        referrerPolicy="no-referrer"
+                                        className="w-full h-full object-cover"
+                                      />
                                     </button>
                                   ))}
                                 </div>
@@ -1562,35 +1767,65 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
               {/* Bulk Deletion Bar */}
               {selectedInventoryIds.length > 0 && (
-                <div className="p-3 bg-rose-950/40 border border-rose-800/80 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in">
-                  <span className="text-xs text-rose-200 font-bold flex items-center gap-2">
-                    <Trash2 className="w-4 h-4 text-rose-400" />
-                    <span>
-                      <strong className="text-white">{selectedInventoryIds.length}</strong> productos seleccionados para eliminar
+                <div className="p-3 bg-slate-900/90 border border-indigo-700/60 rounded-2xl flex flex-col lg:flex-row items-center justify-between gap-3 animate-fade-in shadow-xl">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-indigo-200 font-bold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
+                      <span>
+                        <strong className="text-white font-mono">{selectedInventoryIds.length}</strong> productos seleccionados
+                      </span>
                     </span>
-                  </span>
+
+                    {/* Batch Assign Category Dropdown */}
+                    <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-xl border border-indigo-500/40">
+                      <Tag className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                      <span className="text-[11px] font-bold text-slate-300">Asignar Categoría:</span>
+                      <select
+                        defaultValue=""
+                        disabled={isAssigningCategory}
+                        onChange={(e) => {
+                          const targetCat = e.target.value;
+                          if (targetCat) {
+                            handleBulkAssignCategory(targetCat);
+                            e.target.value = '';
+                          }
+                        }}
+                        className="bg-slate-900 text-white text-xs font-bold rounded-lg px-2.5 py-1 border border-slate-700 focus:outline-hidden cursor-pointer"
+                      >
+                        <option value="" disabled>
+                          {isAssigningCategory ? 'Asignando...' : 'Seleccionar categoría creada...'}
+                        </option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.icon || '🏷️'} {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => setSelectedInventoryIds([])}
-                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 cursor-pointer"
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 cursor-pointer"
                     >
                       Deseleccionar
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowBulkDeleteConfirm(true)}
-                      className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-black rounded-xl shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-black rounded-xl shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>Eliminar Seleccionados ({selectedInventoryIds.length})</span>
+                      <span>Eliminar ({selectedInventoryIds.length})</span>
                     </button>
                   </div>
                 </div>
               )}
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-3 flex-1 max-w-md">
+                <div className="flex flex-col sm:flex-row items-center gap-2 flex-1 max-w-xl">
                   <div className="relative w-full">
                     <Search className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
                     <input
@@ -1600,6 +1835,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden focus:border-indigo-500"
                     />
+                  </div>
+
+                  {/* Filter by Category Selector */}
+                  <div className="relative w-full sm:w-64 shrink-0">
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="w-full appearance-none px-3.5 py-2 pr-8 bg-slate-900 border border-slate-800 rounded-xl text-xs text-slate-200 font-bold focus:outline-hidden focus:border-indigo-500 cursor-pointer"
+                    >
+                      <option value="Todas">Todas las Categorías ({products.length})</option>
+                      {categories.map((c) => {
+                        const count = products.filter(
+                          (p) => p.category.toLowerCase() === c.name.toLowerCase()
+                        ).length;
+                        return (
+                          <option key={c.id} value={c.name}>
+                            {c.icon || '🏷️'} {c.name} ({count})
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
                   </div>
                 </div>
 
@@ -1704,12 +1961,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                             </td>
                             <td className="py-3 px-4 flex items-center gap-3">
                               <img
-                                src={p.imageUrl}
+                                src={resolveImageUrl(p.imageUrl)}
                                 alt={p.title}
+                                referrerPolicy="no-referrer"
                                 className="w-10 h-10 object-cover rounded-lg bg-slate-800 shrink-0 border border-slate-700"
                                 onError={(e) => {
-                                  (e.target as HTMLImageElement).src =
-                                    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+                                  const target = e.target as HTMLImageElement;
+                                  if (p.imageUrl && !target.src.includes('/api/image-proxy')) {
+                                    target.src = `/api/image-proxy?url=${encodeURIComponent(p.imageUrl)}`;
+                                  } else {
+                                    target.src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+                                  }
                                 }}
                               />
                               <div className="min-w-0 max-w-xs">
@@ -1739,7 +2001,53 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                                 )}
                               </div>
                             </td>
-                            <td className="py-3 px-3 text-slate-400">{p.category}</td>
+                            <td className="py-3 px-3">
+                              <div className="relative inline-block max-w-[210px] group">
+                                <select
+                                  value={p.category}
+                                  onChange={(e) => {
+                                    const newCat = e.target.value;
+                                    if (newCat === '__NEW__') {
+                                      const custom = prompt('Ingresa el nombre de la nueva categoría para este producto:');
+                                      if (custom && custom.trim()) {
+                                        ensureCategoryExists(custom.trim()).then((createdName) => {
+                                          updateProduct(p.id, { category: createdName });
+                                          setInventoryNotification({
+                                            type: 'success',
+                                            message: `Categoría creada y asignada: ${createdName}`
+                                          });
+                                        });
+                                      }
+                                      return;
+                                    }
+                                    updateProduct(p.id, { category: newCat });
+                                    setInventoryNotification({
+                                      type: 'success',
+                                      message: `Categoría de "${p.title.slice(0, 22)}..." cambiada a "${newCat}"`
+                                    });
+                                  }}
+                                  className="bg-slate-900/90 hover:bg-slate-800 focus:bg-slate-800 text-xs text-indigo-200 font-bold py-1.5 px-2.5 pr-7 rounded-xl border border-slate-700 hover:border-indigo-500 focus:border-indigo-500 focus:outline-hidden transition-all cursor-pointer appearance-none truncate max-w-full shadow-xs"
+                                  title="Seleccionar y cambiar la categoría de este producto"
+                                >
+                                  {categories.map((c) => (
+                                    <option key={c.id} value={c.name} className="bg-slate-900 text-white py-1">
+                                      {c.icon || '🏷️'} {c.name}
+                                    </option>
+                                  ))}
+
+                                  {!categories.some((c) => c.name.toLowerCase() === (p.category || '').toLowerCase()) && (
+                                    <option value={p.category} className="bg-slate-900 text-amber-300 py-1 font-bold">
+                                      🏷️ {p.category}
+                                    </option>
+                                  )}
+
+                                  <option value="__NEW__" className="bg-indigo-950 text-indigo-300 font-bold py-1">
+                                    ➕ Crear nueva categoría...
+                                  </option>
+                                </select>
+                                <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-400 absolute right-2 top-2.5 pointer-events-none transition-colors" />
+                              </div>
+                            </td>
                             <td className="py-3 px-3">
                               <div className="flex flex-col">
                                 <span className="font-mono text-slate-200 font-bold">
@@ -1842,8 +2150,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
                   <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 flex items-center gap-3">
                     <img
-                      src={productToDelete.imageUrl}
+                      src={resolveImageUrl(productToDelete.imageUrl)}
                       alt={productToDelete.title}
+                      referrerPolicy="no-referrer"
                       className="w-14 h-14 object-cover rounded-xl bg-slate-800 shrink-0 border border-slate-700"
                     />
                     <div className="min-w-0 flex-1">
@@ -2035,13 +2344,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[11px] text-slate-400 block mb-1">Categoría</label>
-                      <input
-                        type="text"
+                      <label className="text-[11px] text-slate-400 block mb-1">
+                        Categoría (Seleccionar Creada)
+                      </label>
+                      <select
                         value={editingProduct.category}
-                        onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
-                      />
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '__NEW__') {
+                            const custom = prompt('Ingresa el nombre de la nueva categoría:');
+                            if (custom && custom.trim()) {
+                              ensureCategoryExists(custom.trim()).then((createdName) => {
+                                setEditingProduct({ ...editingProduct, category: createdName });
+                              });
+                            }
+                            return;
+                          }
+                          setEditingProduct({ ...editingProduct, category: val });
+                        }}
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-medium focus:border-indigo-500 cursor-pointer"
+                      >
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.icon || '🏷️'} {c.name}
+                          </option>
+                        ))}
+                        {!categories.some((c) => c.name.toLowerCase() === (editingProduct.category || '').toLowerCase()) && (
+                          <option value={editingProduct.category}>🏷️ {editingProduct.category}</option>
+                        )}
+                        <option value="__NEW__">➕ Crear nueva categoría...</option>
+                      </select>
                     </div>
                     <div>
                       <label className="text-[11px] text-slate-400 block mb-1">Stock</label>
@@ -2168,13 +2500,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[11px] text-slate-400 block mb-1">Categoría</label>
-                      <input
-                        type="text"
+                      <label className="text-[11px] text-slate-400 block mb-1">
+                        Categoría (Seleccionar Creada)
+                      </label>
+                      <select
                         value={newProduct.category}
-                        onChange={(e) => setNewProduct({ ...newProduct, category: e.target.value })}
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
-                      />
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '__NEW__') {
+                            const custom = prompt('Ingresa el nombre de la nueva categoría:');
+                            if (custom && custom.trim()) {
+                              ensureCategoryExists(custom.trim()).then((createdName) => {
+                                setNewProduct({ ...newProduct, category: createdName });
+                              });
+                            }
+                            return;
+                          }
+                          setNewProduct({ ...newProduct, category: val });
+                        }}
+                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-medium focus:border-indigo-500 cursor-pointer"
+                      >
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.icon || '🏷️'} {c.name}
+                          </option>
+                        ))}
+                        {!categories.some((c) => c.name.toLowerCase() === (newProduct.category || '').toLowerCase()) && newProduct.category && (
+                          <option value={newProduct.category}>🏷️ {newProduct.category}</option>
+                        )}
+                        <option value="__NEW__">➕ Crear nueva categoría...</option>
+                      </select>
                     </div>
                     <div>
                       <label className="text-[11px] text-slate-400 block mb-1">Stock Inicial</label>
@@ -2187,14 +2542,85 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                     </div>
                   </div>
 
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">URL de Imagen</label>
-                    <input
-                      type="text"
-                      value={newProduct.imageUrl}
-                      onChange={(e) => setNewProduct({ ...newProduct, imageUrl: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
-                    />
+                  {/* Image input & live preview */}
+                  <div className="space-y-2 p-3 bg-slate-950/60 border border-slate-800 rounded-2xl">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5 text-indigo-400" />
+                        Imagen del Producto *
+                      </label>
+                      {newProduct.imageUrl && (
+                        <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded font-mono font-bold flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Foto Cargada
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Preview Thumbnail if present */}
+                    {newProduct.imageUrl && (
+                      <div className="flex items-center gap-3 p-2 bg-slate-900 border border-slate-700/80 rounded-xl">
+                        <div className="w-16 h-16 rounded-lg bg-slate-800 overflow-hidden shrink-0 border border-slate-700 relative">
+                          <img
+                            src={resolveImageUrl(newProduct.imageUrl)}
+                            alt="Preview"
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              if (newProduct.imageUrl && !target.src.includes('/api/image-proxy')) {
+                                target.src = `/api/image-proxy?url=${encodeURIComponent(newProduct.imageUrl)}`;
+                              }
+                            }}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex-1 min-w-0 text-xs">
+                          <span className="text-slate-300 font-semibold block truncate">Vista previa de imagen</span>
+                          <span className="text-[10px] text-slate-400 block truncate font-mono">{newProduct.imageUrl}</span>
+                          {newProduct.imageUrl.includes('inovaarg') && (
+                            <span className="text-[9px] text-indigo-400 font-bold block mt-0.5">✨ Extraída directamente de Inova ARG</span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setNewProduct({ ...newProduct, imageUrl: '' })}
+                          className="text-slate-400 hover:text-rose-400 p-1 cursor-pointer"
+                          title="Eliminar foto"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">🔗 Pegar URL de imagen directa:</label>
+                        <input
+                          type="text"
+                          placeholder="https://inovaarg.com/... o https://..."
+                          value={newProduct.imageUrl}
+                          onChange={(e) => setNewProduct({ ...newProduct, imageUrl: e.target.value.trim() })}
+                          className="w-full px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-400 block mb-1">📁 O subir desde tu dispositivo:</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              const b64 = ev.target?.result as string;
+                              if (b64) setNewProduct({ ...newProduct, imageUrl: b64 });
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                          className="w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-indigo-600 file:text-white hover:file:bg-indigo-500 cursor-pointer"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
@@ -3067,8 +3493,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <img
-                        src={item.imageUrl}
+                        src={resolveImageUrl(item.imageUrl)}
                         alt={item.title}
+                        referrerPolicy="no-referrer"
                         className="w-12 h-12 rounded-xl object-cover bg-slate-800 shrink-0 border border-slate-700"
                       />
                       <div className="min-w-0">

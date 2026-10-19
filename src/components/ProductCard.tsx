@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Product } from '../types';
 import { useStore } from '../context/StoreContext';
 import { ShoppingBag, Star, Zap, Eye, Check } from 'lucide-react';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 interface ProductCardProps {
   product: Product;
@@ -14,6 +15,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const [addedJustNow, setAddedJustNow] = useState(false);
 
   const fallbackImage = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+  const resolvedImg = resolveImageUrl(product.imageUrl);
 
   const formatCurrency = (amount: number) => {
     return `${settings.currencySymbol || '$'} ${amount.toLocaleString('es-AR')}`;
@@ -48,13 +50,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         )}
 
         <img
-          src={imageError ? fallbackImage : product.imageUrl || fallbackImage}
+          src={imageError ? fallbackImage : resolvedImg}
           alt={product.title}
           loading="lazy"
+          referrerPolicy="no-referrer"
           onLoad={() => setImageLoaded(true)}
-          onError={() => {
-            setImageError(true);
-            setImageLoaded(true);
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            if (product.imageUrl && !target.src.includes('/api/image-proxy')) {
+              target.src = `/api/image-proxy?url=${encodeURIComponent(product.imageUrl)}`;
+            } else {
+              setImageError(true);
+              setImageLoaded(true);
+            }
           }}
           className={`w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ${
             imageLoaded ? 'opacity-100' : 'opacity-0'

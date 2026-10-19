@@ -24,7 +24,7 @@ function StoreApp() {
   >('super_ofertas');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [sortBy, setSortBy] = useState('featured');
-  const [viewMode, setViewMode] = useState<'grid' | 'grouped'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'grouped'>('grouped');
 
   // Filter and sort products
   const filteredProducts = useMemo(() => {

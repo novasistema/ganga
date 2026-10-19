@@ -2,9 +2,11 @@ export interface Product {
   id: string;
   title: string;
   description: string;
-  originalPrice: number;
-  markupPercentage: number;
-  finalPrice: number;
+  originalPrice: number;       // Costo en Pesos Argentinos (ARS)
+  costCurrency?: 'ARS' | 'USD'; // Moneda original del costo ('ARS' o 'USD')
+  costInUsd?: number;          // Costo en Dólares (U$D) para auto-pesificación
+  markupPercentage: number;    // Margen de ganancia (ej: 40%)
+  finalPrice: number;          // Precio de venta pesificado al público (ARS)
   category: string;
   imageUrl: string;
   galleryUrls?: string[];
@@ -13,6 +15,7 @@ export interface Product {
   supplierName?: string;
   supplierSku?: string;
   lastCostSyncAt?: string;
+  lastVerifiedStatus?: 'in_stock' | 'out_of_stock' | 'price_changed' | 'verified';
   isSuperOffer?: boolean;
   superOfferDiscountLabel?: string;
   catalogPageSource?: number;
@@ -75,6 +78,8 @@ export interface OrderItem {
   price: number;
   quantity: number;
   imageUrl: string;
+  supplierUrl?: string;
+  supplierName?: string;
   verifiedStock?: boolean;
   availableQuantity?: number;
 }
@@ -86,12 +91,21 @@ export interface Order {
   customerPhone: string;
   customerAddress: string;
   customerCity?: string;
+  customerDniCuit?: string;
   customerNotes?: string;
   items: OrderItem[];
   totalAmount: number;
   paymentMethod: 'bank_transfer' | 'mercadopago' | 'card_gateway' | 'cash_on_delivery';
   paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
-  orderStatus: 'presupuesto_pendiente' | 'presupuesto_enviado' | 'pagado' | 'en_preparacion' | 'despachado' | 'entregado' | 'cancelado';
+  orderStatus:
+    | 'presupuesto_pendiente'
+    | 'presupuesto_enviado'
+    | 'pagado'
+    | 'en_preparacion'
+    | 'enviado'
+    | 'despachado'
+    | 'entregado'
+    | 'cancelado';
   budgetStatus?: 'stock_verification_pending' | 'budget_ready' | 'order_confirmed' | 'rejected';
   budgetNotes?: string;
   mercadoPagoPreferenceId?: string;
@@ -99,8 +113,28 @@ export interface Order {
   mercadoPagoPaymentId?: string;
   adjustedTotal?: number;
   verifiedAt?: string;
+  carrierName?: string;
   trackingNumber?: string;
+  trackingUrl?: string;
+  dispatchedAt?: string;
   paymentProofUrl?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CustomerClient {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  address?: string;
+  city?: string;
+  dniCuit?: string;
+  notes?: string;
+  totalOrders: number;
+  totalSpent: number;
+  lastOrderId?: string;
+  lastOrderDate?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -152,8 +186,12 @@ export interface CompanySettings {
   whatsappNumber: string;
   address: string;
   logoUrl?: string;
-  defaultProfitMargin: number; // e.g. 35 for 35%
-  currencySymbol: string;      // e.g. "$"
+  defaultProfitMargin: number; // Margen en % (ej: 40 para 40%)
+  usdExchangeRate: number;     // Cotización Dólar a Pesos ARS (ej: 1550)
+  dollarRateType?: 'blue' | 'oficial' | 'manual';
+  lastDollarSyncAt?: string;
+  autoPesifyWithUsd?: boolean;
+  currencySymbol: string;      // ej: "$"
   bankName: string;
   bankCbuAlias: string;
   bankAccountHolder: string;
@@ -175,4 +213,3 @@ export interface CartItem {
   product: Product;
   quantity: number;
 }
-

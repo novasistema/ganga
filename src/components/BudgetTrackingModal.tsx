@@ -17,6 +17,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 export const BudgetTrackingModal: React.FC = () => {
   const {
@@ -322,8 +323,9 @@ export const BudgetTrackingModal: React.FC = () => {
                     <div key={idx} className="pt-1.5 flex items-center justify-between">
                       <div className="flex items-center gap-2 min-w-0">
                         <img
-                          src={item.imageUrl}
+                          src={resolveImageUrl(item.imageUrl)}
                           alt={item.title}
+                          referrerPolicy="no-referrer"
                           className="w-8 h-8 rounded-md object-cover bg-white border border-gray-200 shrink-0"
                         />
                         <span className="truncate max-w-xs text-gray-800">{item.quantity}x {item.title}</span>

@@ -12,13 +12,23 @@ import {
   Plus,
   Minus
 } from 'lucide-react';
+import { resolveImageUrl } from '../utils/imageUrl';
 
 export const ProductDetailModal: React.FC = () => {
   const { selectedProduct, setSelectedProduct, addToCart, setIsCheckoutOpen, settings } = useStore();
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+  const [activeImage, setActiveImage] = useState<string>('');
+
+  React.useEffect(() => {
+    if (selectedProduct) {
+      setActiveImage(selectedProduct.imageUrl || '');
+    }
+  }, [selectedProduct]);
 
   if (!selectedProduct) return null;
+
+  const currentImg = resolveImageUrl(activeImage || selectedProduct.imageUrl);
 
   const formatCurrency = (amount: number) => {
     return `${settings.currencySymbol || '$'} ${amount.toLocaleString('es-AR')}`;
@@ -48,12 +58,51 @@ export const ProductDetailModal: React.FC = () => {
         </button>
 
         {/* Product Image Column */}
-        <div className="md:w-1/2 bg-gray-50 flex items-center justify-center p-6 relative">
-          <img
-            src={selectedProduct.imageUrl}
-            alt={selectedProduct.title}
-            className="w-full h-auto max-h-80 md:max-h-full object-contain rounded-2xl"
-          />
+        <div className="md:w-1/2 bg-gray-50 flex flex-col items-center justify-center p-6 relative gap-3">
+          <div className="w-full flex items-center justify-center min-h-[240px]">
+            <img
+              src={currentImg}
+              alt={selectedProduct.title}
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                const target = e.target as HTMLImageElement;
+                if (currentImg && !target.src.includes('/api/image-proxy')) {
+                  target.src = `/api/image-proxy?url=${encodeURIComponent(currentImg)}`;
+                }
+              }}
+              className="w-full h-auto max-h-80 md:max-h-full object-contain rounded-2xl"
+            />
+          </div>
+
+          {/* Multiple Gallery Photos Selector */}
+          {selectedProduct.galleryUrls && selectedProduct.galleryUrls.length > 1 && (
+            <div className="flex items-center gap-2 overflow-x-auto w-full py-1 justify-center">
+              {selectedProduct.galleryUrls.map((gUrl, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveImage(gUrl)}
+                  className={`w-12 h-12 rounded-xl overflow-hidden border-2 transition-all cursor-pointer shrink-0 ${
+                    currentImg === gUrl ? 'border-indigo-600 ring-2 ring-indigo-300' : 'border-gray-200 hover:border-gray-400'
+                  }`}
+                >
+                  <img
+                    src={resolveImageUrl(gUrl)}
+                    alt={`Foto ${idx + 1}`}
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      if (!target.src.includes('/api/image-proxy')) {
+                        target.src = `/api/image-proxy?url=${encodeURIComponent(gUrl)}`;
+                      }
+                    }}
+                    className="w-full h-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          )}
+
           {selectedProduct.featured && (
             <span className="absolute top-4 left-4 bg-amber-400 text-slate-950 text-xs font-black px-2.5 py-1 rounded-lg uppercase tracking-wide">
               ⭐ DESTACADO
