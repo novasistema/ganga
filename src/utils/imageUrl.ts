@@ -24,13 +24,14 @@ export function resolveImageUrl(url?: string | null): string {
     return trimmed;
   }
 
-  // If the image is hosted on inovaarg.com or any WordPress uploads folder,
-  // route it through our high-speed server image proxy to guarantee 100% bypass of hotlink firewalls and CORS restrictions.
-  if (
-    trimmed.includes('inovaarg.com') ||
-    trimmed.includes('/wp-content/uploads/') ||
-    trimmed.includes('inova')
-  ) {
+  // Unsplash images are freely hotlinkable and don't need proxying
+  if (trimmed.includes('images.unsplash.com')) {
+    return trimmed;
+  }
+
+  // Any external HTTP/HTTPS URL from any supplier or domain (Inova, Plutotec, MercadoLibre, Cloudflare R2, TiendaNube, etc.)
+  // is routed through our backend proxy to completely avoid browser CORS restrictions, hotlink firewalls, and mixed-content blocks.
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return `/api/image-proxy?url=${encodeURIComponent(trimmed)}`;
   }
 

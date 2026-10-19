@@ -1798,7 +1798,7 @@ app.get('/api/image-proxy', async (req: Request, res: Response) => {
       return res.status(400).send('URL inválida');
     }
 
-    let referer = 'https://inovaarg.com/';
+    let referer = '';
     try {
       referer = `${new URL(targetUrl).protocol}//${new URL(targetUrl).hostname}/`;
     } catch {}
@@ -1816,6 +1816,22 @@ app.get('/api/image-proxy', async (req: Request, res: Response) => {
       }
     });
     clearTimeout(timeout);
+
+    // If 403 Forbidden, retry without Referer header (many CDNs block requests when Referer is sent)
+    if (!upstream.ok && (upstream.status === 403 || upstream.status === 401)) {
+      try {
+        const noRefRes = await fetch(targetUrl, {
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+          }
+        });
+        if (noRefRes.ok) {
+          upstream = noRefRes;
+        }
+      } catch {}
+    }
 
     // If 404, try variant without size suffix like -600x600 or without -scaled or vice versa
     if (!upstream.ok && upstream.status === 404) {
@@ -1860,7 +1876,7 @@ app.get('/api/image-proxy', async (req: Request, res: Response) => {
           <rect width="400" height="400" fill="#0f172a"/>
           <circle cx="200" cy="180" r="50" fill="#1e293b"/>
           <path d="M185 170L200 155L215 170M200 155V195" stroke="#6366f1" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-          <text x="200" y="260" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="14" font-weight="600">Inova ARG • Producto</text>
+          <text x="200" y="260" text-anchor="middle" fill="#94a3b8" font-family="system-ui, sans-serif" font-size="14" font-weight="600">Foto del Producto</text>
         </svg>
       `);
     }

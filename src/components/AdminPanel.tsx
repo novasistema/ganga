@@ -172,6 +172,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
   const [newProduct, setNewProduct] = useState({
     title: '',
     description: '',
+    costCurrency: 'ARS' as 'ARS' | 'USD',
+    costInUsd: 10,
     originalPrice: 15000,
     markupPercentage: 40,
     finalPrice: 21000,
@@ -188,6 +190,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
   const [settingsForm, setSettingsForm] = useState<CompanySettings>({ ...settings });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [settingsSavedSuccess, setSettingsSavedSuccess] = useState(false);
+  const [isSyncingDollar, setIsSyncingDollar] = useState(false);
+
+  const handleSyncLiveDollarRate = async () => {
+    setIsSyncingDollar(true);
+    try {
+      const res = await fetch('/api/dollar-rate');
+      const data = await res.json();
+      if (data.success && data.blue) {
+        setSettingsForm((prev) => ({
+          ...prev,
+          usdExchangeRate: data.blue,
+          lastDollarSyncAt: new Date().toISOString()
+        }));
+        await saveSettings({
+          ...settings,
+          usdExchangeRate: data.blue,
+          lastDollarSyncAt: new Date().toISOString()
+        });
+        setInventoryNotification({
+          type: 'success',
+          message: `¡Cotización Dólar Blue actualizada en vivo a $ ${data.blue.toLocaleString('es-AR')} ARS!`
+        });
+      }
+    } catch {
+      setInventoryNotification({
+        type: 'error',
+        message: 'No se pudo sincronizar la cotización del dólar en vivo.'
+      });
+    } finally {
+      setIsSyncingDollar(false);
+    }
+  };
 
   // Formatter
   const formatCurrency = (val: number) => {
@@ -755,6 +789,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       setNewProduct({
         title: '',
         description: '',
+        costCurrency: 'ARS',
+        costInUsd: 10,
         originalPrice: 15000,
         markupPercentage: 40,
         finalPrice: 21000,
