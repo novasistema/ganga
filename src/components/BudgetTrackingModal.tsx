@@ -17,7 +17,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { resolveImageUrl } from '../utils/imageUrl';
+import { resolveImageUrl, DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
 export const BudgetTrackingModal: React.FC = () => {
   const {
@@ -326,6 +326,15 @@ export const BudgetTrackingModal: React.FC = () => {
                           src={resolveImageUrl(item.imageUrl)}
                           alt={item.title}
                           referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            const raw = (item.imageUrl || '').trim();
+                            if (raw && !target.src.includes('/api/image-proxy')) {
+                              target.src = `/api/image-proxy?url=${encodeURIComponent(raw)}`;
+                            } else {
+                              target.src = DEFAULT_PRODUCT_PLACEHOLDER;
+                            }
+                          }}
                           className="w-8 h-8 rounded-md object-cover bg-white border border-gray-200 shrink-0"
                         />
                         <span className="truncate max-w-xs text-gray-800">{item.quantity}x {item.title}</span>

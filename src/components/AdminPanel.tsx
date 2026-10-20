@@ -38,22 +38,28 @@ import {
   Tag,
   Image as ImageIcon,
   FolderTree,
-  ChevronDown
+  ChevronDown,
+  Users
 } from 'lucide-react';
 import { SuperOfertasModule } from './SuperOfertasModule';
 import { BannerManager } from './BannerManager';
 import { CategoryManager } from './CategoryManager';
-import { resolveImageUrl } from '../utils/imageUrl';
+import { SupplierOrderManager } from './SupplierOrderManager';
+import { CustomerManager } from './CustomerManager';
+import { resolveImageUrl, DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
 interface AdminPanelProps {
   onClose: () => void;
-  initialTab?: 'super_ofertas' | 'scraper' | 'inventory' | 'categories' | 'banners' | 'orders' | 'settings';
+  initialTab?: 'super_ofertas' | 'scraper' | 'inventory' | 'categories' | 'banners' | 'orders' | 'supplier_orders' | 'clients' | 'settings';
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) => {
   const {
     products,
     orders,
+    clients,
+    supplierOrders,
+    createSupplierOrdersFromCustomerOrder,
     settings,
     addProduct,
     addMultipleProducts,
@@ -78,7 +84,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
   const { adminEmail, changeAdminPassword, changeAdminEmail } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'settings' | 'super_ofertas' | 'categories' | 'banners'>(initialTab || 'super_ofertas');
+  const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'supplier_orders' | 'clients' | 'settings' | 'super_ofertas' | 'categories' | 'banners'>(initialTab || 'super_ofertas');
   const [editingImageItemId, setEditingImageItemId] = useState<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'company' | 'payments'>('password');
 
@@ -178,7 +184,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     markupPercentage: 40,
     finalPrice: 21000,
     category: 'Tecnología',
-    imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
+    imageUrl: '',
     stock: 20,
     supplierUrl: '',
     supplierName: 'Inova ARG',
@@ -266,7 +272,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     let estimatedCost = 15000;
     let imageUrl = isFromInova
       ? 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'
-      : 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+      : DEFAULT_PRODUCT_PLACEHOLDER;
     let description = `Artículo del catálogo de ${supplierName}. Calidad verificada listo para comercializar con margen calculado.`;
 
     if (lower.includes('guirnalda') || lower.includes('focos') || lower.includes('foco')) {
@@ -762,10 +768,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
   };
 
   const handleCreateNewProduct = async () => {
-    if (!newProduct.title.trim() || !newProduct.imageUrl.trim()) {
+    if (!newProduct.title.trim()) {
       setInventoryNotification({
         type: 'error',
-        message: 'Por favor ingresa un título e imagen para el producto.'
+        message: 'Por favor ingresa un título para el producto.'
       });
       return;
     }
@@ -777,6 +783,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       const assignedCat = await ensureCategoryExists(newProduct.category || 'General');
       await addProduct({
         ...newProduct,
+        imageUrl: newProduct.imageUrl.trim() || DEFAULT_PRODUCT_PLACEHOLDER,
         category: assignedCat,
         finalPrice
       });
@@ -795,7 +802,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
         markupPercentage: 40,
         finalPrice: 21000,
         category: 'Tecnología',
-        imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
+        imageUrl: '',
         stock: 20,
         supplierUrl: '',
         supplierName: 'Inova ARG',
@@ -1045,8 +1052,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                 : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
             }`}
           >
-            <ShoppingBag className="w-4 h-4" />
-            <span>Ventas & Clientes ({orders.length})</span>
+            <ShoppingBag className="w-4 h-4 text-indigo-400" />
+            <span>Ventas ({orders.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('supplier_orders')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'supplier_orders'
+                ? 'bg-gradient-to-r from-amber-600 to-indigo-600 text-white shadow-md shadow-amber-600/30 ring-1 ring-amber-400'
+                : 'text-amber-300 bg-amber-950/30 border border-amber-800/50 hover:bg-amber-900/50 hover:text-white'
+            }`}
+          >
+            <Truck className="w-4 h-4 text-amber-300" />
+            <span>📦 Pedidos a Proveedor ({supplierOrders.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('clients')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'clients'
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Users className="w-4 h-4 text-emerald-400" />
+            <span>👥 Clientes ({clients.length})</span>
           </button>
 
           <button
@@ -1467,7 +1498,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                                   if (item.imageUrl && !target.src.includes('/api/image-proxy')) {
                                     target.src = `/api/image-proxy?url=${encodeURIComponent(item.imageUrl)}`;
                                   } else {
-                                    target.src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+                                    target.src = DEFAULT_PRODUCT_PLACEHOLDER;
                                   }
                                 }}
                               />
@@ -2006,7 +2037,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                                   if (p.imageUrl && !target.src.includes('/api/image-proxy')) {
                                     target.src = `/api/image-proxy?url=${encodeURIComponent(p.imageUrl)}`;
                                   } else {
-                                    target.src = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+                                    target.src = DEFAULT_PRODUCT_PLACEHOLDER;
                                   }
                                 }}
                               />
@@ -2086,9 +2117,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                             </td>
                             <td className="py-3 px-3">
                               <div className="flex flex-col">
-                                <span className="font-mono text-slate-200 font-bold">
-                                  {formatCurrency(p.originalPrice || Math.round(p.finalPrice / 1.4))}
-                                </span>
+                                {p.costCurrency === 'USD' && p.costInUsd ? (
+                                  <>
+                                    <span className="font-mono text-emerald-300 font-black text-xs flex items-center gap-1">
+                                      <span>🇺🇸</span>
+                                      <span>U$D {p.costInUsd}</span>
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-mono">
+                                      ≈ $ {p.originalPrice.toLocaleString('es-AR')} ARS
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="font-mono text-slate-200 font-bold">
+                                    {formatCurrency(p.originalPrice || Math.round(p.finalPrice / 1.4))}
+                                  </span>
+                                )}
                                 {p.lastCostSyncAt ? (
                                   <span
                                     className="text-[9px] text-emerald-400 font-bold flex items-center gap-0.5 mt-0.5"
@@ -2338,44 +2381,159 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[11px] text-slate-400 block mb-1">Costo Proveedor ($)</label>
-                      <input
-                        type="number"
-                        value={editingProduct.originalPrice}
-                        onChange={(e) =>
-                          setEditingProduct({
-                            ...editingProduct,
-                            originalPrice: Number(e.target.value)
-                          })
-                        }
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
-                      />
+                  {/* Cost Currency Selection (ARS default vs USD) */}
+                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] text-slate-300 font-bold block">
+                        Moneda del Costo
+                      </label>
+                      <span className="text-[10px] text-slate-400">
+                        Dólar: <strong className="text-amber-300">$ {(settings.usdExchangeRate || 1555).toLocaleString('es-AR')} ARS</strong>
+                      </span>
                     </div>
-                    <div>
-                      <label className="text-[11px] text-slate-400 block mb-1">Margen de Ganancia (%)</label>
-                      <input
-                        type="number"
-                        value={editingProduct.markupPercentage}
-                        onChange={(e) =>
-                          setEditingProduct({
-                            ...editingProduct,
-                            markupPercentage: Number(e.target.value)
-                          })
-                        }
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="p-3 bg-slate-800/60 rounded-xl flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Precio Final de Venta al Público:</span>
-                    <span className="font-mono font-black text-emerald-400 text-sm">
-                      {formatCurrency(
-                        Math.round(editingProduct.originalPrice * (1 + editingProduct.markupPercentage / 100))
-                      )}
-                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const rate = settings.usdExchangeRate || 1555;
+                          const inArs = editingProduct.costCurrency === 'USD' && editingProduct.costInUsd
+                            ? Math.round(editingProduct.costInUsd * rate)
+                            : editingProduct.originalPrice;
+                          setEditingProduct({
+                            ...editingProduct,
+                            costCurrency: 'ARS',
+                            originalPrice: inArs,
+                            finalPrice: Math.round(inArs * (1 + (editingProduct.markupPercentage || 40) / 100))
+                          });
+                        }}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          editingProduct.costCurrency !== 'USD'
+                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-md'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>🇦🇷 Pesos ($ ARS)</span>
+                        <span className="text-[10px] opacity-75">(Por defecto)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const rate = settings.usdExchangeRate || 1555;
+                          const inUsd = editingProduct.costInUsd || Math.round((editingProduct.originalPrice / rate) * 10) / 10;
+                          const inArs = Math.round(inUsd * rate);
+                          setEditingProduct({
+                            ...editingProduct,
+                            costCurrency: 'USD',
+                            costInUsd: inUsd,
+                            originalPrice: inArs,
+                            finalPrice: Math.round(inArs * (1 + (editingProduct.markupPercentage || 40) / 100))
+                          });
+                        }}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          editingProduct.costCurrency === 'USD'
+                            ? 'bg-emerald-600 border-emerald-500 text-white shadow-md'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>🇺🇸 Dólares (U$D)</span>
+                      </button>
+                    </div>
+
+                    {editingProduct.costCurrency === 'USD' ? (
+                      <div className="space-y-2 pt-1">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[11px] text-emerald-400 font-bold block mb-1">
+                              Costo en Dólares (U$D)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={editingProduct.costInUsd || ''}
+                              onChange={(e) => {
+                                const usd = parseFloat(e.target.value) || 0;
+                                const rate = settings.usdExchangeRate || 1555;
+                                const inArs = Math.round(usd * rate);
+                                setEditingProduct({
+                                  ...editingProduct,
+                                  costInUsd: usd,
+                                  originalPrice: inArs,
+                                  finalPrice: Math.round(inArs * (1 + (editingProduct.markupPercentage || 40) / 100))
+                                });
+                              }}
+                              className="w-full px-3 py-2 bg-slate-900 border border-emerald-500/50 rounded-xl text-xs font-black text-emerald-300"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-slate-400 block mb-1">Margen de Ganancia (%)</label>
+                            <input
+                              type="number"
+                              value={editingProduct.markupPercentage}
+                              onChange={(e) => {
+                                const margin = Number(e.target.value);
+                                setEditingProduct({
+                                  ...editingProduct,
+                                  markupPercentage: margin,
+                                  finalPrice: Math.round(editingProduct.originalPrice * (1 + margin / 100))
+                                });
+                              }}
+                              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between text-xs text-emerald-300">
+                          <span>Pesificación Automática:</span>
+                          <span className="font-mono font-bold">
+                            U$D {editingProduct.costInUsd || 0} × ${(settings.usdExchangeRate || 1555).toLocaleString('es-AR')} = $ {editingProduct.originalPrice.toLocaleString('es-AR')} ARS
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="text-[11px] text-slate-400 block mb-1">Costo Proveedor ($ ARS)</label>
+                          <input
+                            type="number"
+                            value={editingProduct.originalPrice}
+                            onChange={(e) => {
+                              const cost = Number(e.target.value);
+                              setEditingProduct({
+                                ...editingProduct,
+                                originalPrice: cost,
+                                finalPrice: Math.round(cost * (1 + (editingProduct.markupPercentage || 40) / 100))
+                              });
+                            }}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-slate-400 block mb-1">Margen de Ganancia (%)</label>
+                          <input
+                            type="number"
+                            value={editingProduct.markupPercentage}
+                            onChange={(e) => {
+                              const margin = Number(e.target.value);
+                              setEditingProduct({
+                                ...editingProduct,
+                                markupPercentage: margin,
+                                finalPrice: Math.round(editingProduct.originalPrice * (1 + margin / 100))
+                              });
+                            }}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="p-2.5 bg-slate-900 rounded-xl flex justify-between items-center text-xs border border-slate-800">
+                      <span className="text-slate-400">Precio Final Pesificado de Venta al Público:</span>
+                      <span className="font-mono font-black text-emerald-400 text-sm">
+                        $ {Math.round(editingProduct.originalPrice * (1 + (editingProduct.markupPercentage || 40) / 100)).toLocaleString('es-AR')} ARS
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -2423,13 +2581,40 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                   </div>
 
                   <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">URL de Imagen</label>
-                    <input
-                      type="text"
-                      value={editingProduct.imageUrl}
-                      onChange={(e) => setEditingProduct({ ...editingProduct, imageUrl: e.target.value })}
-                      className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
-                    />
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="text-[11px] text-slate-400">URL de Imagen del Producto</label>
+                      {editingProduct.imageUrl && (
+                        <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Imagen Asignada
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="https://... o enlace directo de la imagen"
+                        value={editingProduct.imageUrl}
+                        onChange={(e) => setEditingProduct({ ...editingProduct, imageUrl: e.target.value })}
+                        className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
+                      />
+                      <div className="w-10 h-10 rounded-xl bg-slate-950 border border-slate-700 shrink-0 overflow-hidden flex items-center justify-center">
+                        <img
+                          src={resolveImageUrl(editingProduct.imageUrl)}
+                          alt="Vista previa"
+                          referrerPolicy="no-referrer"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            const raw = (editingProduct.imageUrl || '').trim();
+                            if (raw && !target.src.includes('/api/image-proxy')) {
+                              target.src = `/api/image-proxy?url=${encodeURIComponent(raw)}`;
+                            } else {
+                              target.src = DEFAULT_PRODUCT_PLACEHOLDER;
+                            }
+                          }}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
@@ -2513,24 +2698,158 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[11px] text-slate-400 block mb-1">Costo Proveedor ($)</label>
-                      <input
-                        type="number"
-                        value={newProduct.originalPrice}
-                        onChange={(e) => setNewProduct({ ...newProduct, originalPrice: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white"
-                      />
+                  {/* Cost Currency Selection (ARS default vs USD) */}
+                  <div className="p-3 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] text-slate-300 font-bold block">
+                        Moneda del Costo
+                      </label>
+                      <span className="text-[10px] text-slate-400">
+                        Dólar: <strong className="text-amber-300">$ {(settings.usdExchangeRate || 1555).toLocaleString('es-AR')} ARS</strong>
+                      </span>
                     </div>
-                    <div>
-                      <label className="text-[11px] text-slate-400 block mb-1">Margen de Ganancia (%)</label>
-                      <input
-                        type="number"
-                        value={newProduct.markupPercentage}
-                        onChange={(e) => setNewProduct({ ...newProduct, markupPercentage: Number(e.target.value) })}
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold"
-                      />
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const rate = settings.usdExchangeRate || 1555;
+                          const inArs = newProduct.costCurrency === 'USD' && newProduct.costInUsd
+                            ? Math.round(newProduct.costInUsd * rate)
+                            : newProduct.originalPrice;
+                          setNewProduct({
+                            ...newProduct,
+                            costCurrency: 'ARS',
+                            originalPrice: inArs,
+                            finalPrice: Math.round(inArs * (1 + (newProduct.markupPercentage || 40) / 100))
+                          });
+                        }}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          newProduct.costCurrency !== 'USD'
+                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-md'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>🇦🇷 Pesos ($ ARS)</span>
+                        <span className="text-[10px] opacity-75">(Por defecto)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const rate = settings.usdExchangeRate || 1555;
+                          const inUsd = newProduct.costInUsd || Math.round((newProduct.originalPrice / rate) * 10) / 10;
+                          const inArs = Math.round(inUsd * rate);
+                          setNewProduct({
+                            ...newProduct,
+                            costCurrency: 'USD',
+                            costInUsd: inUsd,
+                            originalPrice: inArs,
+                            finalPrice: Math.round(inArs * (1 + (newProduct.markupPercentage || 40) / 100))
+                          });
+                        }}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          newProduct.costCurrency === 'USD'
+                            ? 'bg-emerald-600 border-emerald-500 text-white shadow-md'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        <span>🇺🇸 Dólares (U$D)</span>
+                      </button>
+                    </div>
+
+                    {newProduct.costCurrency === 'USD' ? (
+                      <div className="space-y-2 pt-1">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[11px] text-emerald-400 font-bold block mb-1">
+                              Costo en Dólares (U$D)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={newProduct.costInUsd || ''}
+                              onChange={(e) => {
+                                const usd = parseFloat(e.target.value) || 0;
+                                const rate = settings.usdExchangeRate || 1555;
+                                const inArs = Math.round(usd * rate);
+                                setNewProduct({
+                                  ...newProduct,
+                                  costInUsd: usd,
+                                  originalPrice: inArs,
+                                  finalPrice: Math.round(inArs * (1 + (newProduct.markupPercentage || 40) / 100))
+                                });
+                              }}
+                              className="w-full px-3 py-2 bg-slate-900 border border-emerald-500/50 rounded-xl text-xs font-black text-emerald-300"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] text-slate-400 block mb-1">Margen de Ganancia (%)</label>
+                            <input
+                              type="number"
+                              value={newProduct.markupPercentage}
+                              onChange={(e) => {
+                                const margin = Number(e.target.value);
+                                setNewProduct({
+                                  ...newProduct,
+                                  markupPercentage: margin,
+                                  finalPrice: Math.round(newProduct.originalPrice * (1 + margin / 100))
+                                });
+                              }}
+                              className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-between text-xs text-emerald-300">
+                          <span>Pesificación Automática:</span>
+                          <span className="font-mono font-bold">
+                            U$D {newProduct.costInUsd || 0} × ${(settings.usdExchangeRate || 1555).toLocaleString('es-AR')} = $ {newProduct.originalPrice.toLocaleString('es-AR')} ARS
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div>
+                          <label className="text-[11px] text-slate-400 block mb-1">Costo Proveedor ($ ARS)</label>
+                          <input
+                            type="number"
+                            value={newProduct.originalPrice}
+                            onChange={(e) => {
+                              const cost = Number(e.target.value);
+                              setNewProduct({
+                                ...newProduct,
+                                originalPrice: cost,
+                                finalPrice: Math.round(cost * (1 + (newProduct.markupPercentage || 40) / 100))
+                              });
+                            }}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[11px] text-slate-400 block mb-1">Margen de Ganancia (%)</label>
+                          <input
+                            type="number"
+                            value={newProduct.markupPercentage}
+                            onChange={(e) => {
+                              const margin = Number(e.target.value);
+                              setNewProduct({
+                                ...newProduct,
+                                markupPercentage: margin,
+                                finalPrice: Math.round(newProduct.originalPrice * (1 + margin / 100))
+                              });
+                            }}
+                            className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="p-2.5 bg-slate-900 rounded-xl flex justify-between items-center text-xs border border-slate-800">
+                      <span className="text-slate-400">Precio Final Pesificado de Venta al Público:</span>
+                      <span className="font-mono font-black text-emerald-400 text-sm">
+                        $ {Math.round(newProduct.originalPrice * (1 + (newProduct.markupPercentage || 40) / 100)).toLocaleString('es-AR')} ARS
+                      </span>
                     </div>
                   </div>
 
@@ -2946,6 +3265,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
                             <td className="py-3 px-3 text-right">
                               <div className="inline-flex items-center gap-1.5">
+                                {/* Button to generate purchase order to supplier */}
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    try {
+                                      await createSupplierOrdersFromCustomerOrder(o);
+                                      setActiveTab('supplier_orders');
+                                    } catch (err: any) {
+                                      alert('Error al generar orden al proveedor: ' + err.message);
+                                    }
+                                  }}
+                                  className="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 rounded-lg text-xs font-black transition-all flex items-center gap-1 cursor-pointer"
+                                  title="Generar Orden de Compra para encargar al proveedor asignado a estos productos"
+                                >
+                                  <Truck className="w-3.5 h-3.5 text-amber-300" />
+                                  <span>Pedir a Proveedor</span>
+                                </button>
+
                                 {/* Button to open stock verification & budget modal */}
                                 <button
                                   onClick={() => {
@@ -2991,7 +3328,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
         )}
 
         {/* ============================================================ */}
-        {/* TAB 4: CONFIGURACIÓN & SEGURIDAD (CONTRASEÑA, EMPRESA, PAGOS) */}
+        {/* TAB: SUPPLIER PURCHASE ORDERS MODULE (ÓRDENES DE COMPRA)     */}
+        {/* ============================================================ */}
+        {activeTab === 'supplier_orders' && (
+          <div className="animate-fade-in">
+            <SupplierOrderManager />
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB: REGISTERED CLIENTS CRM                                  */}
+        {/* ============================================================ */}
+        {activeTab === 'clients' && (
+          <div className="animate-fade-in">
+            <CustomerManager />
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB: CONFIGURACIÓN & SEGURIDAD (CONTRASEÑA, EMPRESA, PAGOS)  */}
         {/* ============================================================ */}
         {activeTab === 'settings' && (
           <div className="space-y-6 animate-fade-in max-w-4xl">

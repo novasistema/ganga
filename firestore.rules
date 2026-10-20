@@ -28,6 +28,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Supplier purchase orders (Órdenes de Compra a Proveedores)
+    match /supplier_orders/{orderId} {
+      allow read, write: if true;
+    }
+
     // Store & payment settings
     match /settings/{settingId} {
       allow read, write: if true;

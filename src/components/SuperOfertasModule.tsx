@@ -37,7 +37,7 @@ import { useStore } from '../context/StoreContext';
 import confetti from 'canvas-confetti';
 import { splitPdfToJpgPages, stampPriceOnFlyerImage, downloadDataUrlAsImage } from '../utils/pdfExtractor';
 import { generateOringFlyerDataUrl } from '../data/oringFlyerSvg';
-import { resolveImageUrl } from '../utils/imageUrl';
+import { resolveImageUrl, DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
 interface SuperOfertasModuleProps {
   onClose?: () => void;
@@ -1257,6 +1257,15 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
                                 src={resolveImageUrl(deal.imageUrl)}
                                 alt={deal.title}
                                 referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  const raw = (deal.imageUrl || '').trim();
+                                  if (raw && !target.src.includes('/api/image-proxy')) {
+                                    target.src = `/api/image-proxy?url=${encodeURIComponent(raw)}`;
+                                  } else {
+                                    target.src = DEFAULT_PRODUCT_PLACEHOLDER;
+                                  }
+                                }}
                                 className="w-full h-full object-contain bg-slate-950 group-hover:scale-105 transition-transform duration-300"
                               />
                               <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -1529,6 +1538,15 @@ export const SuperOfertasModule: React.FC<SuperOfertasModuleProps> = ({
                         src={resolveImageUrl(deal.imageUrl)}
                         alt={deal.title}
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          const raw = (deal.imageUrl || '').trim();
+                          if (raw && !target.src.includes('/api/image-proxy')) {
+                            target.src = `/api/image-proxy?url=${encodeURIComponent(raw)}`;
+                          } else {
+                            target.src = DEFAULT_PRODUCT_PLACEHOLDER;
+                          }
+                        }}
                         className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                       />
                       <div className="absolute top-2.5 left-2.5 flex flex-col gap-1 items-start">

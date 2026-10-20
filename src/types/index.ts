@@ -139,6 +139,46 @@ export interface CustomerClient {
   updatedAt?: string;
 }
 
+export interface SupplierOrderItem {
+  productId: string;
+  title: string;
+  quantity: number;
+  unitCost: number;        // Costo unitario a pagar al proveedor en ARS
+  costCurrency?: 'ARS' | 'USD';
+  unitCostUsd?: number;
+  totalCost: number;       // quantity * unitCost
+  customerSalePrice: number; // Precio vendido al cliente
+  totalSalePrice: number;    // quantity * customerSalePrice
+  supplierUrl?: string;    // Enlace directo al producto en la web del proveedor
+  supplierSku?: string;
+  imageUrl?: string;
+}
+
+export interface SupplierPurchaseOrder {
+  id: string;                      // ej: "OC-1792400012"
+  orderNumber: string;             // ej: "OC #0012"
+  customerOrderId: string;         // ID del pedido del cliente asociado
+  customerName: string;
+  customerPhone?: string;
+  supplierName: string;            // Proveedor asignado (ej: Inova ARG, Plutotec)
+  supplierPhone?: string;          // WhatsApp del proveedor si se conoce
+  supplierEmail?: string;
+  items: SupplierOrderItem[];
+  totalCostToPay: number;          // Total que debemos pagar al proveedor (ARS)
+  totalCostUsd?: number;           // Total en USD si los productos están en dólares
+  customerSaleTotal: number;       // Total que nos paga el cliente por estos items
+  estimatedProfit: number;         // customerSaleTotal - totalCostToPay (Ganancia neta)
+  status: 'pendiente_encargar' | 'encargado_pagado' | 'en_transito' | 'recibido_deposito' | 'cancelado';
+  supplierOrderCode?: string;      // Nro de orden o factura que nos dio el proveedor
+  notes?: string;
+  trackingNumber?: string;
+  orderedAt?: string;
+  paidAt?: string;
+  receivedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface HeroBannerFeature {
   id: string;
   icon: 'zap' | 'credit-card' | 'shield' | 'flame' | 'truck' | 'tag' | 'gift' | 'clock' | 'sparkles' | 'badge';
@@ -185,6 +225,8 @@ export interface CompanySettings {
   phone: string;
   whatsappNumber: string;
   address: string;
+  city?: string;
+  cuit?: string;
   logoUrl?: string;
   defaultProfitMargin: number; // Margen en % (ej: 40 para 40%)
   usdExchangeRate: number;     // Cotización Dólar a Pesos ARS (ej: 1550)

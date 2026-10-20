@@ -83,6 +83,26 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["companyName", "defaultProfitMargin"]
+    },
+    "SupplierOrder": {
+      "title": "SupplierOrder",
+      "description": "Automated purchase order to supplier based on sold customer items",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderNumber": { "type": "string", "maxLength": 50 },
+        "customerOrderId": { "type": "string", "maxLength": 100 },
+        "customerName": { "type": "string", "maxLength": 150 },
+        "supplierName": { "type": "string", "maxLength": 120 },
+        "supplierPhone": { "type": "string", "maxLength": 50 },
+        "totalCostToPay": { "type": "number" },
+        "totalCostUsd": { "type": "number" },
+        "customerSaleTotal": { "type": "number" },
+        "estimatedProfit": { "type": "number" },
+        "status": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["orderNumber", "supplierName", "totalCostToPay", "status"]
     }
   },
   "firestore": {
@@ -97,6 +117,10 @@
     "/clients/{clientId}": {
       "schema": "Client",
       "description": "Registered buyer and seller clients"
+    },
+    "/supplier_orders/{orderId}": {
+      "schema": "SupplierOrder",
+      "description": "Purchase orders generated for suppliers based on sold customer products"
     },
     "/settings/{settingsId}": {
       "schema": "Settings",

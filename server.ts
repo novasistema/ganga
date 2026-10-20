@@ -440,7 +440,7 @@ export const extractDetailsFromSlugAndDomain = (targetUrl: string): SlugProductD
     estimatedCost: 12000,
     imageUrl: isFromInova
       ? 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'
-      : 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
+      : '',
     supplierName
   };
 };

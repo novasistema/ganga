@@ -1,7 +1,7 @@
 import React from 'react';
 import { useStore } from '../context/StoreContext';
 import { X, Trash2, ShoppingBag, ArrowRight, ShieldCheck, Plus, Minus, Truck } from 'lucide-react';
-import { resolveImageUrl } from '../utils/imageUrl';
+import { resolveImageUrl, DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
 export const CartDrawer: React.FC = () => {
   const {
@@ -107,6 +107,15 @@ export const CartDrawer: React.FC = () => {
                     src={resolveImageUrl(item.product.imageUrl)}
                     alt={item.product.title}
                     referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      const raw = (item.product.imageUrl || '').trim();
+                      if (raw && !target.src.includes('/api/image-proxy')) {
+                        target.src = `/api/image-proxy?url=${encodeURIComponent(raw)}`;
+                      } else {
+                        target.src = DEFAULT_PRODUCT_PLACEHOLDER;
+                      }
+                    }}
                     className="w-16 h-16 object-cover rounded-xl bg-white shrink-0 border border-gray-100"
                   />
 

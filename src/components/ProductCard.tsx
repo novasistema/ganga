@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Product } from '../types';
 import { useStore } from '../context/StoreContext';
 import { ShoppingBag, Star, Zap, Eye, Check } from 'lucide-react';
-import { resolveImageUrl } from '../utils/imageUrl';
+import { resolveImageUrl, DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
 interface ProductCardProps {
   product: Product;
@@ -10,12 +10,14 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { settings, addToCart, setIsCartOpen, setIsCheckoutOpen, setSelectedProduct } = useStore();
-  const [imageLoaded, setImageLoaded] = useState(false);
-  const [imageError, setImageError] = useState(false);
   const [addedJustNow, setAddedJustNow] = useState(false);
+  const [imageSrc, setImageSrc] = useState<string>(() => resolveImageUrl(product.imageUrl));
+  const [retriedWithProxy, setRetriedWithProxy] = useState(false);
 
-  const fallbackImage = 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
-  const resolvedImg = resolveImageUrl(product.imageUrl);
+  React.useEffect(() => {
+    setImageSrc(resolveImageUrl(product.imageUrl));
+    setRetriedWithProxy(false);
+  }, [product.imageUrl]);
 
   const formatCurrency = (amount: number) => {
     return `${settings.currencySymbol || '$'} ${amount.toLocaleString('es-AR')}`;
@@ -43,30 +45,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       className="group relative bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden cursor-pointer hover:-translate-y-1"
     >
       {/* Product Image Container */}
-      <div className="relative w-full aspect-square bg-gray-50 overflow-hidden">
-        {/* Skeleton while loading */}
-        {!imageLoaded && !imageError && (
-          <div className="absolute inset-0 bg-gradient-to-r from-gray-100 via-gray-200 to-gray-100 animate-pulse" />
-        )}
-
+      <div className="relative w-full aspect-square bg-gray-100 overflow-hidden">
         <img
-          src={imageError ? fallbackImage : resolvedImg}
+          src={imageSrc}
           alt={product.title}
           loading="lazy"
           referrerPolicy="no-referrer"
-          onLoad={() => setImageLoaded(true)}
-          onError={(e) => {
-            const target = e.target as HTMLImageElement;
-            if (product.imageUrl && !target.src.includes('/api/image-proxy')) {
-              target.src = `/api/image-proxy?url=${encodeURIComponent(product.imageUrl)}`;
+          onError={() => {
+            const raw = (product.imageUrl || '').trim();
+            if (!retriedWithProxy && raw && !imageSrc.includes('/api/image-proxy')) {
+              setRetriedWithProxy(true);
+              setImageSrc(`/api/image-proxy?url=${encodeURIComponent(raw)}`);
             } else {
-              setImageError(true);
-              setImageLoaded(true);
+              setImageSrc(DEFAULT_PRODUCT_PLACEHOLDER);
             }
           }}
-          className={`w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ${
-            imageLoaded ? 'opacity-100' : 'opacity-0'
-          }`}
+          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
         />
 
         {/* Floating Badges */}

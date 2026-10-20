@@ -2,17 +2,21 @@
  * Helper to ensure product images load reliably in any environment
  * (desktop, mobile, iframes, Safari, Chrome) without CORS, mixed content, or hotlinking blocks.
  */
-export function resolveImageUrl(url?: string | null): string {
-  const fallback =
-    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+export const DEFAULT_PRODUCT_PLACEHOLDER =
+  'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" fill="none"><rect width="400" height="400" fill="%23f8fafc"/><rect x="130" y="130" width="140" height="140" rx="16" fill="%23e2e8f0"/><path d="M170 210l25-25 35 35M160 235h80" stroke="%2394a3b8" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="180" cy="170" r="10" fill="%2394a3b8"/><text x="200" y="305" text-anchor="middle" fill="%2364748b" font-family="system-ui,sans-serif" font-size="13" font-weight="700">Foto de Producto</text></svg>';
 
+/**
+ * Helper to ensure product images load reliably in any environment.
+ * Direct URLs are preferred for ultra-fast CDN loading.
+ */
+export function resolveImageUrl(url?: string | null): string {
   if (!url || typeof url !== 'string') {
-    return fallback;
+    return DEFAULT_PRODUCT_PLACEHOLDER;
   }
 
   const trimmed = url.trim();
   if (!trimmed) {
-    return fallback;
+    return DEFAULT_PRODUCT_PLACEHOLDER;
   }
 
   // Already local data URI, blob, or internal proxy route
@@ -24,18 +28,22 @@ export function resolveImageUrl(url?: string | null): string {
     return trimmed;
   }
 
-  // Unsplash images are freely hotlinkable and don't need proxying
-  if (trimmed.includes('images.unsplash.com')) {
+  // Protocol relative
+  if (trimmed.startsWith('//')) {
+    return `https:${trimmed}`;
+  }
+
+  // Normal HTTP/HTTPS direct URL
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
 
-  // Any external HTTP/HTTPS URL from any supplier or domain (Inova, Plutotec, MercadoLibre, Cloudflare R2, TiendaNube, etc.)
-  // is routed through our backend proxy to completely avoid browser CORS restrictions, hotlink firewalls, and mixed-content blocks.
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return `/api/image-proxy?url=${encodeURIComponent(trimmed)}`;
-  }
-
   return trimmed;
+}
+
+export function getProxyImageUrl(url: string): string {
+  if (!url || !url.startsWith('http')) return url || DEFAULT_PRODUCT_PLACEHOLDER;
+  return `/api/image-proxy?url=${encodeURIComponent(url.trim())}`;
 }
 
 /**
@@ -61,5 +69,5 @@ export function getCategoryFallbackImage(categoryName?: string): string {
   if (low.includes('adaptador') || low.includes('viaje') || low.includes('usb') || low.includes('cargador')) {
     return '/api/image-proxy?url=https%3A%2F%2Finovaarg.com%2Fwp-content%2Fuploads%2F2026%2F02%2Fadaptador-viajero.webp';
   }
-  return 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80';
+  return DEFAULT_PRODUCT_PLACEHOLDER;
 }

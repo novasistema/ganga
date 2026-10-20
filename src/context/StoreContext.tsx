@@ -10,12 +10,25 @@ import {
   orderBy
 } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
-import { Product, Order, CompanySettings, CartItem, HeroBannerItem, StoreCategory } from '../types';
+import {
+  Product,
+  Order,
+  CompanySettings,
+  CartItem,
+  HeroBannerItem,
+  StoreCategory,
+  CustomerClient,
+  SupplierPurchaseOrder,
+  SupplierOrderItem
+} from '../types';
 import { DEFAULT_SETTINGS, INITIAL_PRODUCTS, DEFAULT_BANNERS, DEFAULT_CATEGORIES } from '../data/initialData';
+import { DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
 interface StoreContextType {
   products: Product[];
   orders: Order[];
+  clients: CustomerClient[];
+  supplierOrders: SupplierPurchaseOrder[];
   settings: CompanySettings;
   cart: CartItem[];
   cartCount: number;
@@ -63,6 +76,13 @@ interface StoreContextType {
   updateOrderStatus: (orderId: string, status: Order['orderStatus']) => Promise<void>;
   updatePaymentStatus: (orderId: string, status: Order['paymentStatus']) => Promise<void>;
   resetToInitialCatalog: () => Promise<void>;
+  addClient: (client: Omit<CustomerClient, 'id' | 'createdAt' | 'totalOrders' | 'totalSpent'>) => Promise<string>;
+  updateClient: (id: string, updates: Partial<CustomerClient>) => Promise<void>;
+  deleteClient: (id: string) => Promise<void>;
+  createSupplierOrder: (order: Omit<SupplierPurchaseOrder, 'id' | 'createdAt'>) => Promise<string>;
+  createSupplierOrdersFromCustomerOrder: (customerOrder: Order) => Promise<SupplierPurchaseOrder[]>;
+  updateSupplierOrderStatus: (orderId: string, status: SupplierPurchaseOrder['status'], notes?: string) => Promise<void>;
+  deleteSupplierOrder: (orderId: string) => Promise<void>;
   syncProductCostFromLink: (productId: string, customUrl?: string) => Promise<{
     success: boolean;
     oldCost: number;
@@ -98,6 +118,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return INITIAL_PRODUCTS;
   });
   const [orders, setOrders] = useState<Order[]>([]);
+  const [clients, setClients] = useState<CustomerClient[]>([]);
+  const [supplierOrders, setSupplierOrders] = useState<SupplierPurchaseOrder[]>([]);
   const [settings, setSettings] = useState<CompanySettings>(DEFAULT_SETTINGS);
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
@@ -211,6 +233,48 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => unsubOrders();
   }, []);
 
+  // 4. Sync Clients from Firestore
+  useEffect(() => {
+    const clientsColRef = collection(db, 'clients');
+    const q = query(clientsColRef, orderBy('createdAt', 'desc'));
+    const unsubClients = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: CustomerClient[] = [];
+        snapshot.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as CustomerClient);
+        });
+        setClients(list);
+      },
+      (error) => {
+        console.warn('Clients onSnapshot error:', error.message);
+      }
+    );
+
+    return () => unsubClients();
+  }, []);
+
+  // 5. Sync Supplier Purchase Orders from Firestore
+  useEffect(() => {
+    const supColRef = collection(db, 'supplier_orders');
+    const q = query(supColRef, orderBy('createdAt', 'desc'));
+    const unsubSupplierOrders = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: SupplierPurchaseOrder[] = [];
+        snapshot.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as SupplierPurchaseOrder);
+        });
+        setSupplierOrders(list);
+      },
+      (error) => {
+        console.warn('Supplier orders onSnapshot error:', error.message);
+      }
+    );
+
+    return () => unsubSupplierOrders();
+  }, []);
+
   // Function to seed initial catalog to Firestore
   const seedInitialProducts = async () => {
     try {
@@ -309,7 +373,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         markupPercentage: Number(p.markupPercentage) || 35,
         finalPrice: Number(p.finalPrice) || Math.round((Number(p.originalPrice) || 12000) * 1.35),
         category: p.category || 'General',
-        imageUrl: p.imageUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80',
+        imageUrl: p.imageUrl || DEFAULT_PRODUCT_PLACEHOLDER,
         supplierName: p.supplierName || (p.supplierUrl?.includes('inova') ? 'Inova ARG' : 'Proveedor Web'),
         supplierUrl: p.supplierUrl || '',
         createdAt: new Date().toISOString(),
@@ -581,9 +645,247 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       handleFirestoreError(error, OperationType.WRITE, `orders/${orderId}`);
     }
 
+    // Automatically register or update buyer in Clientes (CRM)
+    try {
+      const clientEmail = (orderData.customerEmail || '').trim().toLowerCase();
+      const clientPhone = (orderData.customerPhone || '').trim();
+      const clientName = (orderData.customerName || '').trim();
+
+      if (clientName || clientEmail || clientPhone) {
+        const existingClient = clients.find(
+          (c) =>
+            (clientEmail && c.email.toLowerCase() === clientEmail) ||
+            (clientPhone && c.phone === clientPhone)
+        );
+
+        if (existingClient) {
+          const updatedClient: CustomerClient = {
+            ...existingClient,
+            name: clientName || existingClient.name,
+            phone: clientPhone || existingClient.phone,
+            email: clientEmail || existingClient.email,
+            address: orderData.customerAddress || existingClient.address,
+            city: orderData.customerCity || existingClient.city,
+            dniCuit: orderData.customerDniCuit || existingClient.dniCuit,
+            totalOrders: (existingClient.totalOrders || 0) + 1,
+            totalSpent: (existingClient.totalSpent || 0) + (orderData.totalAmount || 0),
+            lastOrderId: orderId,
+            lastOrderDate: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'clients', existingClient.id), updatedClient);
+          setClients((prev) => prev.map((c) => (c.id === existingClient.id ? updatedClient : c)));
+        } else {
+          const newClientId = `cli-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+          const newClient: CustomerClient = {
+            id: newClientId,
+            name: clientName || 'Cliente Web',
+            email: clientEmail || '',
+            phone: clientPhone || '',
+            address: orderData.customerAddress || '',
+            city: orderData.customerCity || '',
+            dniCuit: orderData.customerDniCuit || '',
+            notes: orderData.budgetNotes || '',
+            totalOrders: 1,
+            totalSpent: orderData.totalAmount || 0,
+            lastOrderId: orderId,
+            lastOrderDate: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'clients', newClientId), newClient);
+          setClients((prev) => [newClient, ...prev]);
+        }
+      }
+    } catch (clientErr: any) {
+      console.warn('Could not auto-register client in Firestore:', clientErr.message);
+    }
+
     setOrders((prev) => [fullOrder, ...prev]);
     clearCart();
+
+    // Auto-generate supplier purchase orders draft for easy one-click ordering
+    try {
+      createSupplierOrdersFromCustomerOrder(fullOrder).catch((err) => {
+        console.warn('Auto-create supplier orders notice:', err.message);
+      });
+    } catch {}
+
     return orderId;
+  };
+
+  const addClient = async (
+    clientData: Omit<CustomerClient, 'id' | 'createdAt' | 'totalOrders' | 'totalSpent'>
+  ): Promise<string> => {
+    const newId = `cli-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    const fullClient: CustomerClient = {
+      ...clientData,
+      id: newId,
+      totalOrders: 0,
+      totalSpent: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(doc(db, 'clients', newId), fullClient);
+    setClients((prev) => [fullClient, ...prev]);
+    return newId;
+  };
+
+  const updateClient = async (id: string, updates: Partial<CustomerClient>) => {
+    const updated = { ...updates, updatedAt: new Date().toISOString() };
+    await updateDoc(doc(db, 'clients', id), updated);
+    setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...updated } : c)));
+  };
+
+  const deleteClient = async (id: string) => {
+    await deleteDoc(doc(db, 'clients', id));
+    setClients((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const createSupplierOrder = async (
+    orderData: Omit<SupplierPurchaseOrder, 'id' | 'createdAt'>
+  ): Promise<string> => {
+    const ocId = `OC-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+    const full: SupplierPurchaseOrder = {
+      ...orderData,
+      id: ocId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(doc(db, 'supplier_orders', ocId), full);
+    setSupplierOrders((prev) => [full, ...prev]);
+    return ocId;
+  };
+
+  const createSupplierOrdersFromCustomerOrder = async (
+    customerOrder: Order
+  ): Promise<SupplierPurchaseOrder[]> => {
+    // Group order items by supplier
+    const supplierGroups: { [supplierName: string]: SupplierOrderItem[] } = {};
+
+    for (const item of customerOrder.items) {
+      const prod = products.find((p) => p.id === item.productId);
+      const supplierName = (
+        prod?.supplierName ||
+        (prod?.supplierUrl?.toLowerCase().includes('plutotec') ? 'Plutotec' : '') ||
+        (prod?.supplierUrl?.toLowerCase().includes('inova') ? 'Inova ARG' : '') ||
+        'Inova ARG'
+      ).trim();
+
+      const unitCost = prod?.originalPrice || Math.round(item.price * 0.7);
+      const unitCostUsd =
+        prod?.costInUsd ||
+        (prod?.costCurrency === 'USD'
+          ? Math.round(unitCost / (settings.usdExchangeRate || 1555))
+          : undefined);
+      const supplierUrl = prod?.supplierUrl || '';
+      const supplierSku = prod?.supplierSku || '';
+      const imageUrl = prod?.imageUrl || item.imageUrl || '';
+
+      const supItem: SupplierOrderItem = {
+        productId: item.productId,
+        title: item.title,
+        quantity: item.quantity,
+        unitCost,
+        costCurrency: prod?.costCurrency || 'ARS',
+        unitCostUsd,
+        totalCost: unitCost * item.quantity,
+        customerSalePrice: item.price,
+        totalSalePrice: item.price * item.quantity,
+        supplierUrl,
+        supplierSku,
+        imageUrl
+      };
+
+      if (!supplierGroups[supplierName]) {
+        supplierGroups[supplierName] = [];
+      }
+      supplierGroups[supplierName].push(supItem);
+    }
+
+    const createdList: SupplierPurchaseOrder[] = [];
+    const suppliers = Object.keys(supplierGroups);
+
+    for (let i = 0; i < suppliers.length; i++) {
+      const supName = suppliers[i];
+      const supItems = supplierGroups[supName];
+      const totalCostToPay = supItems.reduce((acc, it) => acc + it.totalCost, 0);
+      const customerSaleTotal = supItems.reduce((acc, it) => acc + it.totalSalePrice, 0);
+      const estimatedProfit = customerSaleTotal - totalCostToPay;
+      const totalCostUsd = supItems.some((it) => it.unitCostUsd)
+        ? supItems.reduce((acc, it) => acc + (it.unitCostUsd || 0) * it.quantity, 0)
+        : undefined;
+
+      const randomSuffix = Math.floor(100 + Math.random() * 900);
+      const ocId = `OC-${Date.now().toString().slice(-6)}-${i + 1}`;
+      const orderNumber = `OC #${Date.now().toString().slice(-4)}${randomSuffix}`;
+
+      let supplierPhone = '';
+      if (supName.toLowerCase().includes('inova')) supplierPhone = '+5491123456789';
+      else if (supName.toLowerCase().includes('plutotec')) supplierPhone = '+5491198765432';
+
+      const newOrder: SupplierPurchaseOrder = {
+        id: ocId,
+        orderNumber,
+        customerOrderId: customerOrder.id,
+        customerName: customerOrder.customerName,
+        customerPhone: customerOrder.customerPhone,
+        supplierName: supName,
+        supplierPhone,
+        items: supItems,
+        totalCostToPay,
+        totalCostUsd,
+        customerSaleTotal,
+        estimatedProfit,
+        status: 'pendiente_encargar',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      try {
+        await setDoc(doc(db, 'supplier_orders', ocId), newOrder);
+      } catch (err: any) {
+        console.warn('Could not save supplier order in Firestore:', err.message);
+      }
+
+      createdList.push(newOrder);
+    }
+
+    setSupplierOrders((prev) => [...createdList, ...prev]);
+    return createdList;
+  };
+
+  const updateSupplierOrderStatus = async (
+    orderId: string,
+    status: SupplierPurchaseOrder['status'],
+    notes?: string
+  ) => {
+    const updates: Partial<SupplierPurchaseOrder> = {
+      status,
+      updatedAt: new Date().toISOString()
+    };
+    if (notes !== undefined) updates.notes = notes;
+    if (status === 'encargado_pagado') updates.paidAt = new Date().toISOString();
+    if (status === 'recibido_deposito') updates.receivedAt = new Date().toISOString();
+
+    try {
+      await updateDoc(doc(db, 'supplier_orders', orderId), updates);
+    } catch (err: any) {
+      console.warn('Could not update supplier order in Firestore:', err.message);
+    }
+
+    setSupplierOrders((prev) =>
+      prev.map((so) => (so.id === orderId ? { ...so, ...updates } : so))
+    );
+  };
+
+  const deleteSupplierOrder = async (orderId: string) => {
+    try {
+      await deleteDoc(doc(db, 'supplier_orders', orderId));
+    } catch (err: any) {
+      console.warn('Could not delete supplier order in Firestore:', err.message);
+    }
+    setSupplierOrders((prev) => prev.filter((so) => so.id !== orderId));
   };
 
   const generateMercadoPagoLink = async (order: Order) => {
@@ -815,6 +1117,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       value={{
         products,
         orders,
+        clients,
+        supplierOrders,
         settings,
         cart,
         cartCount,
@@ -862,6 +1166,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateOrderStatus,
         updatePaymentStatus,
         resetToInitialCatalog,
+        addClient,
+        updateClient,
+        deleteClient,
+        createSupplierOrder,
+        createSupplierOrdersFromCustomerOrder,
+        updateSupplierOrderStatus,
+        deleteSupplierOrder,
         syncProductCostFromLink,
         syncAllProductCostsFromLinks
       }}
