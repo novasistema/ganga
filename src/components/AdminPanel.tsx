@@ -111,6 +111,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
   // --- SCRAPER STATE ---
   const [scrapeUrl, setScrapeUrl] = useState('');
   const [markupPercent, setMarkupPercent] = useState<number>(settings.defaultProfitMargin || 40);
+  const [extractorCostCurrency, setExtractorCostCurrency] = useState<'ARS' | 'USD'>('ARS');
   const [isScraping, setIsScraping] = useState(false);
   const [scrapeError, setScrapeError] = useState<string | null>(null);
   const [scrapedItems, setScrapedItems] = useState<Product[]>([]);
@@ -269,13 +270,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     const isFromInova = host.includes('inovaarg') || host.includes('inova');
 
     let category = isFromInova ? 'Catálogo Inova' : 'Hogar & Bazar';
+    const catMatch = pathname.match(/\/categoria\/([^/]+)/i);
+    if (catMatch && catMatch[1]) {
+      const rawCat = decodeURIComponent(catMatch[1]).replace(/[-_]+/g, ' ').trim();
+      category = rawCat.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    }
+
     let estimatedCost = 15000;
     let imageUrl = isFromInova
       ? 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'
+      : host.includes('plutotec')
+      ? 'https://pub-1bbaf3059e0a4ec6a42b48b9be45c1d2.r2.dev/products/1790702850414-CP220.jpg'
       : DEFAULT_PRODUCT_PLACEHOLDER;
     let description = `Artículo del catálogo de ${supplierName}. Calidad verificada listo para comercializar con margen calculado.`;
 
-    if (lower.includes('guirnalda') || lower.includes('focos') || lower.includes('foco')) {
+    if (
+      lower.includes('afeitadora') ||
+      lower.includes('cp220') ||
+      lower.includes('cp-220') ||
+      lower.includes('onica') ||
+      lower.includes('shaver') ||
+      lower.includes('cortadora')
+    ) {
+      title = 'AFEITADORA INALAMBRICA ONICA CP220';
+      category = 'Cuidado Personal';
+      estimatedCost = 15750;
+      imageUrl = 'https://pub-1bbaf3059e0a4ec6a42b48b9be45c1d2.r2.dev/products/1790702850414-CP220.jpg';
+      description = 'Afeitadora inalámbrica profesional Onica CP220 Gentleman Edition con 3 cabezales flotantes de alta precisión, cable de carga USB y diseño ergonómico para uso diario.';
+      supplierName = 'Plutotec';
+    } else if (lower.includes('guirnalda') || lower.includes('focos') || lower.includes('foco')) {
       title = 'Guirnalda 5M 10 Focos Multicolor POL-32';
       category = 'Hogar & Iluminación';
       estimatedCost = 19500;
@@ -341,13 +364,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       description = 'Combo Smartwatch multifunción con auriculares Bluetooth P9 y set de 7 mallas intercambiables.';
     }
 
-    const finalPrice = Math.round(estimatedCost * (1 + margin / 100));
+    const rate = settings.usdExchangeRate || 1550;
+    let costArs = estimatedCost;
+    let costUsdVal: number | undefined = undefined;
+    if (extractorCostCurrency === 'USD') {
+      costUsdVal = Math.round((estimatedCost / rate) * 10) / 10;
+      costArs = Math.round(costUsdVal * rate);
+    }
+    const finalPrice = Math.round(costArs * (1 + margin / 100)); // Precio de venta SIEMPRE en Pesos ($ ARS)
 
     return {
       id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       title,
       description,
-      originalPrice: estimatedCost,
+      originalPrice: costArs,
+      costCurrency: extractorCostCurrency,
+      costInUsd: costUsdVal,
       markupPercentage: margin,
       finalPrice,
       category,
@@ -380,6 +412,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     setImportSuccessMessage(null);
 
     const margin = Number(markupPercent) || 40;
+    const rate = settings.usdExchangeRate || 1550;
 
     try {
       const response = await fetch('/api/scrape-products', {
@@ -387,7 +420,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           url: urlToUse.trim(),
-          markupPercentage: margin
+          markupPercentage: margin,
+          costCurrency: extractorCostCurrency,
+          usdExchangeRate: rate
         })
       });
 
@@ -402,12 +437,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       }
 
       if (data && data.success && Array.isArray(data.products) && data.products.length > 0) {
-        const productsWithParsedPrices: Product[] = data.products.map((p: any) => ({
-          ...p,
-          originalPrice: Number(p.originalPrice) || 12000,
-          markupPercentage: margin,
-          finalPrice: Math.round((Number(p.originalPrice) || 12000) * (1 + margin / 100))
-        }));
+        const productsWithParsedPrices: Product[] = data.products.map((p: any) => {
+          const itemCurrency = p.costCurrency || extractorCostCurrency || 'ARS';
+          let costArs = Number(p.originalPrice) || 12000;
+          let costUsd = p.costInUsd;
+          if (itemCurrency === 'USD') {
+            if (costUsd === undefined) costUsd = Math.round((costArs / rate) * 10) / 10;
+            costArs = Math.round(costUsd * rate);
+          }
+          // Precio de venta SIEMPRE en pesos argentinos ($ ARS)
+          const finalPrice = Math.round(costArs * (1 + margin / 100));
+
+          return {
+            ...p,
+            costCurrency: itemCurrency,
+            costInUsd: costUsd,
+            originalPrice: costArs,
+            markupPercentage: margin,
+            finalPrice
+          };
+        });
 
         setScrapedItems(productsWithParsedPrices);
         setSelectedScrapedIds(productsWithParsedPrices.map((p) => p.id));
@@ -459,10 +508,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       prev.map((item) => {
         if (item.id === id) {
           const updated = { ...item, ...updates };
-          if (updates.originalPrice !== undefined || updates.markupPercentage !== undefined) {
-            const cost = updates.originalPrice !== undefined ? updates.originalPrice : item.originalPrice;
-            const margin = updates.markupPercentage !== undefined ? updates.markupPercentage : item.markupPercentage;
-            updated.finalPrice = Math.round(cost * (1 + margin / 100));
+          const rate = settings.usdExchangeRate || 1550;
+          const margin = updates.markupPercentage !== undefined ? updates.markupPercentage : item.markupPercentage;
+          const currency = updates.costCurrency !== undefined ? updates.costCurrency : item.costCurrency || 'ARS';
+
+          if (currency === 'USD') {
+            const usd = updates.costInUsd !== undefined ? updates.costInUsd : (item.costInUsd || Math.round((item.originalPrice / rate) * 10) / 10);
+            const costArs = Math.round(usd * rate);
+            updated.costCurrency = 'USD';
+            updated.costInUsd = usd;
+            updated.originalPrice = costArs;
+            // PRECIO DE VENTA SIEMPRE EN PESOS ARS
+            updated.finalPrice = Math.round(costArs * (1 + margin / 100));
+          } else {
+            const costArs = updates.originalPrice !== undefined ? updates.originalPrice : item.originalPrice;
+            updated.costCurrency = 'ARS';
+            updated.costInUsd = undefined;
+            updated.originalPrice = costArs;
+            // PRECIO DE VENTA SIEMPRE EN PESOS ARS
+            updated.finalPrice = Math.round(costArs * (1 + margin / 100));
           }
           return updated;
         }
@@ -1129,10 +1193,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                   />
                 </div>
 
+                {/* Cost Currency selection */}
+                <div className="flex items-center gap-1 bg-slate-900 border border-slate-700 p-1 rounded-2xl shrink-0">
+                  <span className="text-[11px] text-slate-400 font-bold px-2 whitespace-nowrap">Costo en:</span>
+                  <button
+                    type="button"
+                    onClick={() => setExtractorCostCurrency('ARS')}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      extractorCostCurrency === 'ARS'
+                        ? 'bg-indigo-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🇦🇷 Pesos ($)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExtractorCostCurrency('USD')}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                      extractorCostCurrency === 'USD'
+                        ? 'bg-emerald-600 text-white shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <span>🇺🇸 Dólares (U$D)</span>
+                  </button>
+                </div>
+
                 {/* Markup setting */}
                 <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 px-3.5 py-2.5 rounded-2xl shrink-0">
                   <Percent className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs text-slate-300 font-bold whitespace-nowrap">Margen a sumar:</span>
+                  <span className="text-xs text-slate-300 font-bold whitespace-nowrap">Margen:</span>
                   <input
                     type="number"
                     min="1"
@@ -1163,6 +1254,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                   )}
                 </button>
               </div>
+
+              {/* Conversion indicator if USD is chosen */}
+              {extractorCostCurrency === 'USD' && (
+                <div className="p-3 bg-emerald-950/40 border border-emerald-500/40 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-emerald-300 animate-fade-in shadow-inner">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded-lg bg-emerald-900/70 text-emerald-200 font-bold">💵 Cotización Dólar:</span>
+                    <span className="font-mono font-bold text-white">
+                      1 U$D = $ {(settings.usdExchangeRate || 1550).toLocaleString('es-AR')} ARS
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-emerald-400 font-medium">
+                    ✓ El costo se pesifica automáticamente. <strong>El Precio de Venta al cliente SIEMPRE es en Pesos ($ ARS).</strong>
+                  </div>
+                </div>
+              )}
 
               {/* Dedicated Inova ARG Live Catalog Explorer */}
               <div className="pt-3 border-t border-slate-800 space-y-2.5">

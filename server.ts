@@ -30,9 +30,11 @@ interface ExtractedProduct {
   id: string;
   title: string;
   description: string;
-  originalPrice: number;
+  originalPrice: number;        // Costo en ARS (pesificado)
+  costCurrency?: 'ARS' | 'USD';  // Moneda del costo
+  costInUsd?: number;           // Costo en USD si aplica
   markupPercentage: number;
-  finalPrice: number;
+  finalPrice: number;           // Precio de venta SIEMPRE en ARS
   category: string;
   imageUrl: string;
   galleryUrls: string[];
@@ -274,6 +276,25 @@ export const extractDetailsFromSlugAndDomain = (targetUrl: string): SlugProductD
 
   const isFromInova = host.includes('inovaarg') || host.includes('inova');
 
+  // Recognition for Afeitadora Inalámbrica Onica CP220 and Plutotec products
+  if (
+    lowerText.includes('afeitadora') ||
+    lowerText.includes('cp220') ||
+    lowerText.includes('cp-220') ||
+    lowerText.includes('onica') ||
+    lowerText.includes('shaver') ||
+    lowerText.includes('cortadora')
+  ) {
+    return {
+      title: 'AFEITADORA INALAMBRICA ONICA CP220',
+      category: 'Cuidado Personal',
+      description: 'Afeitadora inalámbrica profesional Onica CP220 Gentleman Edition con 3 cabezales flotantes de alta precisión, cable de carga USB y diseño ergonómico.',
+      estimatedCost: 15750,
+      imageUrl: 'https://pub-1bbaf3059e0a4ec6a42b48b9be45c1d2.r2.dev/products/1790702850414-CP220.jpg',
+      supplierName: 'Plutotec'
+    };
+  }
+
   // Curated recognition for specific popular products with real high-resolution images
   if (lowerText.includes('afilador') || lowerText.includes('cuchillo')) {
     return {
@@ -433,17 +454,105 @@ export const extractDetailsFromSlugAndDomain = (targetUrl: string): SlugProductD
     ? cleanedSlug.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
     : `Artículo de ${supplierName}`;
 
+  let detectedCategory = isFromInova ? 'Catálogo Inova' : 'Importados';
+  const catMatch = pathname.match(/\/categoria\/([^/]+)/i);
+  if (catMatch && catMatch[1]) {
+    const rawCat = decodeURIComponent(catMatch[1]).replace(/[-_]+/g, ' ').trim();
+    detectedCategory = rawCat.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+  }
+
   return {
     title,
-    category: isFromInova ? 'Catálogo Inova' : 'Importados',
+    category: detectedCategory,
     description: `Artículo del catálogo de ${supplierName}. Calidad verificada listo para comercializar con margen calculado.`,
     estimatedCost: 12000,
     imageUrl: isFromInova
       ? 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'
+      : host.includes('plutotec')
+      ? 'https://pub-1bbaf3059e0a4ec6a42b48b9be45c1d2.r2.dev/products/1790702850414-CP220.jpg'
       : '',
     supplierName
   };
 };
+
+// Helper to reliably extract product objects from Next.js App Router (RSC streaming chunks),
+// Plutotec, TiendaNube, and Shopify pages without getting tripped by escaped quotes or nested braces.
+export function extractNextJsRscProduct(html: string): any {
+  if (!html) return null;
+  const keys = ['product\\":{', 'product":{', 'product\\\\":{', 'product\\\\\\":{'];
+  let pIdx = -1;
+  for (const k of keys) {
+    const idx = html.indexOf(k);
+    if (idx !== -1) {
+      pIdx = idx + k.indexOf('{');
+      break;
+    }
+  }
+
+  if (pIdx === -1) {
+    const match = html.match(/["']product["']\s*:\s*\{/);
+    if (match && match.index !== undefined) {
+      pIdx = html.indexOf('{', match.index);
+    }
+  }
+
+  if (pIdx === -1) return null;
+
+  let depth = 0;
+  let endIdx = -1;
+  let inQuotes = false;
+  let isEsc = false;
+
+  for (let i = pIdx; i < Math.min(html.length, pIdx + 30000); i++) {
+    const c = html[i];
+    if (c === '\\') {
+      isEsc = !isEsc;
+      continue;
+    }
+    if (c === '"' && !isEsc) {
+      inQuotes = !inQuotes;
+    }
+    if (!inQuotes) {
+      if (c === '{') depth++;
+      else if (c === '}') {
+        depth--;
+        if (depth === 0) {
+          endIdx = i;
+          break;
+        }
+      }
+    }
+    isEsc = false;
+  }
+
+  if (endIdx === -1) return null;
+
+  const raw = html.substring(pIdx, endIdx + 1);
+  const cleaned = raw.replace(/\\+/g, '').replace(/\\"/g, '"');
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (parsed && (parsed.name || parsed.title || parsed.price !== undefined)) {
+      return parsed;
+    }
+  } catch {
+    // Regex extraction fallback inside chunk
+    const priceM = raw.match(/price(?:_offer)?["'\s:]+([0-9]+(?:\.[0-9]+)?)/);
+    const nameM = raw.match(/name["'\s:]+([^"\\]+)/);
+    const catM = raw.match(/category["'\s:]+([^"\\]+)/);
+    const imgM = raw.match(/https:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|webp)/i);
+    const stockM = raw.match(/stock["'\s:]+([0-9]+)/);
+    if (priceM || nameM || imgM) {
+      return {
+        name: nameM ? nameM[1] : undefined,
+        price: priceM ? Number(priceM[1]) : undefined,
+        category: catM ? catM[1] : undefined,
+        image: imgM ? imgM[0] : undefined,
+        stock: stockM ? Number(stockM[1]) : undefined
+      };
+    }
+  }
+  return null;
+}
 
 // Helper to clean WordPress scaled/resized images to full resolution
 export function cleanHighResImageUrl(imgUrl: string): string {
@@ -509,7 +618,7 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 9500);
+    const timeout = setTimeout(() => controller.abort(), 20000);
 
     const response = await fetch(url, {
       signal: controller.signal,
@@ -555,17 +664,8 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     }
 
     // 0. Next.js App Router (RSC streaming payload) / Embedded JSON Product Data (Plutotec, Next.js, Tiendanube, Shopify)
-    let embeddedProduct: any = null;
+    let embeddedProduct: any = extractNextJsRscProduct(html);
     try {
-      const unescaped = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-      const pMatch = unescaped.match(/"product"\s*:\s*(\{(?:[^{}]|(?:\{[^{}]*\}))*\})/);
-      if (pMatch) {
-        const parsed = JSON.parse(pMatch[1]);
-        if (parsed && (parsed.name || parsed.title || parsed.price !== undefined)) {
-          embeddedProduct = parsed;
-        }
-      }
-
       if (!embeddedProduct) {
         const nextDataScript = $('script#__NEXT_DATA__').html();
         if (nextDataScript) {
@@ -836,7 +936,7 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
 // API Endpoint to scrape products from a URL
 app.post('/api/scrape-products', async (req: Request, res: Response) => {
   try {
-    const { url, markupPercentage = 35 } = req.body;
+    const { url, markupPercentage = 35, costCurrency = 'ARS', usdExchangeRate = 1550 } = req.body;
 
     const targetUrl = normalizeUrl(url);
     if (!targetUrl) {
@@ -880,7 +980,7 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
     // Live HTTP Scraping
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 9500);
+      const timeout = setTimeout(() => controller.abort(), 20000);
 
       const response = await fetch(targetUrl, {
         signal: controller.signal,
@@ -968,19 +1068,8 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
       };
 
       // 0. Next.js App Router (RSC streaming payload) / Embedded JSON Product Data (Plutotec, Next.js, Tiendanube, Shopify)
-      let embeddedProduct: any = null;
+      let embeddedProduct: any = extractNextJsRscProduct(html);
       try {
-        const unescaped = html.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-        // A. Single product check: "product":{...}
-        const pMatch = unescaped.match(/"product"\s*:\s*(\{(?:[^{}]|(?:\{[^{}]*\}))*\})/);
-        if (pMatch) {
-          const parsed = JSON.parse(pMatch[1]);
-          if (parsed && (parsed.name || parsed.title || parsed.price !== undefined)) {
-            embeddedProduct = parsed;
-          }
-        }
-
-        // B. Next.js pageProps product check
         if (!embeddedProduct) {
           const nextDataScript = $('script#__NEXT_DATA__').html();
           if (nextDataScript) {
@@ -991,7 +1080,6 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
           }
         }
 
-        // C. TiendaNube LS.product check
         if (!embeddedProduct) {
           const tnMatch = html.match(/LS\.product\s*=\s*(\{[\s\S]*?\});/);
           if (tnMatch) {
@@ -1004,8 +1092,16 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
         // If a single embedded product was identified, construct it with exact supplier details
         if (embeddedProduct && (embeddedProduct.name || embeddedProduct.title)) {
           const rawPrice = Number(embeddedProduct.price_offer || embeddedProduct.price);
-          const cost = !isNaN(rawPrice) && rawPrice > 0 ? Math.round(rawPrice) : (slugData.estimatedCost || 12000);
-          const finalPrice = Math.round(cost * (1 + margin / 100));
+          const rawCost = !isNaN(rawPrice) && rawPrice > 0 ? Math.round(rawPrice) : (slugData.estimatedCost || 12000);
+          
+          let costArs = rawCost;
+          let costUsdVal: number | undefined = undefined;
+          if (costCurrency === 'USD') {
+            costUsdVal = rawCost;
+            costArs = Math.round(costUsdVal * Number(usdExchangeRate || 1550));
+          }
+
+          const finalPrice = Math.round(costArs * (1 + margin / 100));
           const prodTitle = cleanPublicTitle(embeddedProduct.name || embeddedProduct.title);
           const prodDesc = embeddedProduct.description || embeddedProduct.full_description || `Artículo original de ${detectedSupplier}.`;
 
@@ -1039,7 +1135,9 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
             id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
             title: prodTitle || slugData.title,
             description: prodDesc,
-            originalPrice: cost,
+            originalPrice: costArs,
+            costCurrency: costCurrency === 'USD' ? 'USD' : 'ARS',
+            costInUsd: costUsdVal,
             markupPercentage: margin,
             finalPrice,
             category: prodCat || 'General',
@@ -1149,7 +1247,14 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
                 extractedCost = slugData.estimatedCost > 0 ? slugData.estimatedCost : 12000;
               }
 
-              const originalPrice = extractedCost;
+              let costArs = extractedCost;
+              let costUsdVal: number | undefined = undefined;
+              if (costCurrency === 'USD') {
+                costUsdVal = extractedCost;
+                costArs = Math.round(costUsdVal * Number(usdExchangeRate || 1550));
+              }
+
+              const originalPrice = costArs;
               const finalPrice = Math.round(originalPrice * (1 + margin / 100));
 
               // Check breadcrumbs for true category
@@ -1218,6 +1323,8 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
                 title: cleanTitle || slugData.title,
                 description: item.description || slugData.description,
                 originalPrice,
+                costCurrency: costCurrency === 'USD' ? 'USD' : 'ARS',
+                costInUsd: costUsdVal,
                 markupPercentage: margin,
                 finalPrice,
                 category: breadcrumbCat || item.category || slugData.category,
@@ -1333,7 +1440,14 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
               .first()
               .text()
               .trim();
-            const originalPrice = parseArgentinePrice(priceText) || 15000;
+            const rawCost = parseArgentinePrice(priceText) || 15000;
+            let costArs = rawCost;
+            let costUsdVal: number | undefined = undefined;
+            if (costCurrency === 'USD') {
+              costUsdVal = rawCost;
+              costArs = Math.round(costUsdVal * Number(usdExchangeRate || 1550));
+            }
+            const originalPrice = costArs;
             const finalPrice = Math.round(originalPrice * (1 + margin / 100));
 
             scrapedProducts.push({
@@ -1341,6 +1455,8 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
               title: cleanPublicTitle(rawTitle),
               description: `Artículo del catálogo de ${detectedSupplier}.`,
               originalPrice,
+              costCurrency: costCurrency === 'USD' ? 'USD' : 'ARS',
+              costInUsd: costUsdVal,
               markupPercentage: margin,
               finalPrice,
               category: loopCat || slugData.category || 'Catálogo',
@@ -1485,12 +1601,22 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
           extractedPrice = slugData.estimatedCost > 0 ? slugData.estimatedCost : 12000;
         }
 
-        const finalPrice = Math.round(extractedPrice * (1 + margin / 100));
+        let costArs = extractedPrice;
+        let costUsdVal: number | undefined = undefined;
+        if (costCurrency === 'USD') {
+          costUsdVal = extractedPrice;
+          costArs = Math.round(costUsdVal * Number(usdExchangeRate || 1550));
+        }
+
+        const originalPrice = costArs;
+        const finalPrice = Math.round(originalPrice * (1 + margin / 100));
         scrapedProducts.push({
           id: `prod-${Date.now()}`,
           title: cleanTitle || slugData.title,
           description: ogDesc.substring(0, 300) || slugData.description,
-          originalPrice: extractedPrice,
+          originalPrice,
+          costCurrency: costCurrency === 'USD' ? 'USD' : 'ARS',
+          costInUsd: costUsdVal,
           markupPercentage: margin,
           finalPrice,
           category: extractedCategory || slugData.category,
@@ -1598,14 +1724,22 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
       }
 
       // Graceful instant extraction from URL slug and keywords
-      const itemCost = slugData.estimatedCost > 0 ? slugData.estimatedCost : 12000;
-      const finalPrice = Math.round(itemCost * (1 + margin / 100));
+      const rawCost = slugData.estimatedCost > 0 ? slugData.estimatedCost : 12000;
+      let costArs = rawCost;
+      let costUsdVal: number | undefined = undefined;
+      if (costCurrency === 'USD') {
+        costUsdVal = rawCost;
+        costArs = Math.round(costUsdVal * Number(usdExchangeRate || 1550));
+      }
+      const finalPrice = Math.round(costArs * (1 + margin / 100));
 
       const fallbackItem: ExtractedProduct = {
         id: `scraped-smart-${Date.now()}`,
         title: slugData.title,
         description: slugData.description,
-        originalPrice: itemCost,
+        originalPrice: costArs,
+        costCurrency: costCurrency === 'USD' ? 'USD' : 'ARS',
+        costInUsd: costUsdVal,
         markupPercentage: margin,
         finalPrice,
         category: slugData.category,
@@ -1667,7 +1801,7 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
 // API Endpoint to sync/update single product cost from its supplier link
 app.post('/api/sync-product-cost', async (req: Request, res: Response) => {
   try {
-    const { url, markupPercentage = 40, currentOriginalPrice } = req.body;
+    const { url, markupPercentage = 40, currentOriginalPrice, costCurrency = 'ARS', usdExchangeRate = 1550 } = req.body;
 
     const targetUrl = normalizeUrl(url);
     if (!targetUrl) {
@@ -1681,9 +1815,16 @@ app.post('/api/sync-product-cost', async (req: Request, res: Response) => {
     const extracted = await extractLiveCostFromUrl(targetUrl);
     const slugData = extractDetailsFromSlugAndDomain(targetUrl);
 
-    let newCost = extracted.cost;
-    if (newCost <= 0) {
-      newCost = slugData.estimatedCost > 0 ? slugData.estimatedCost : 12000;
+    let rawCost = extracted.cost;
+    if (rawCost <= 0) {
+      rawCost = slugData.estimatedCost > 0 ? slugData.estimatedCost : 12000;
+    }
+
+    let newCost = rawCost;
+    let costUsdVal: number | undefined = undefined;
+    if (costCurrency === 'USD') {
+      costUsdVal = rawCost;
+      newCost = Math.round(costUsdVal * Number(usdExchangeRate || 1550));
     }
 
     const oldCost = Number(currentOriginalPrice) || 0;
@@ -1696,6 +1837,8 @@ app.post('/api/sync-product-cost', async (req: Request, res: Response) => {
       url: targetUrl,
       cost: newCost,
       originalPrice: newCost,
+      costCurrency: costCurrency === 'USD' ? 'USD' : 'ARS',
+      costInUsd: costUsdVal,
       finalPrice: newFinalPrice,
       oldCost,
       diff,
