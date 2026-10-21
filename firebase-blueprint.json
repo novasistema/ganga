@@ -2,129 +2,212 @@
   "entities": {
     "Product": {
       "title": "Product",
-      "description": "Item imported from dropshipping supplier or created manually",
+      "description": "NUVOH catalog product with wholesale pricing tiers and specifications",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "title": { "type": "string", "maxLength": 250 },
-        "description": { "type": "string", "maxLength": 5000 },
-        "originalPrice": { "type": "number" },
-        "costCurrency": { "type": "string", "maxLength": 10 },
-        "costInUsd": { "type": "number" },
-        "markupPercentage": { "type": "number" },
-        "finalPrice": { "type": "number" },
-        "category": { "type": "string", "maxLength": 100 },
-        "imageUrl": { "type": "string", "maxLength": 1000 },
+        "name": { "type": "string" },
+        "hook": { "type": "string" },
+        "category": { "type": "string" },
+        "sku": { "type": "string" },
+        "code": { "type": "string" },
+        "brand": { "type": "string" },
+        "priceUnit": { "type": "number" },
+        "priceTiers": { "type": "object" },
+        "badges": { "type": "array" },
+        "specs": { "type": "array" },
+        "image": { "type": "string" },
         "stock": { "type": "number" },
-        "supplierUrl": { "type": "string", "maxLength": 1000 },
-        "inStock": { "type": "boolean" },
         "featured": { "type": "boolean" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "isNew": { "type": "boolean" }
       },
-      "required": ["title", "finalPrice", "category", "imageUrl"]
+      "required": ["id", "name", "category", "sku", "priceUnit", "stock"]
     },
     "Order": {
       "title": "Order",
-      "description": "Customer purchase order through the store checkout",
+      "description": "Wholesale store purchase order",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "customerName": { "type": "string", "maxLength": 120 },
-        "customerEmail": { "type": "string", "maxLength": 150 },
-        "customerPhone": { "type": "string", "maxLength": 50 },
-        "customerAddress": { "type": "string", "maxLength": 300 },
-        "customerCity": { "type": "string", "maxLength": 120 },
-        "customerDniCuit": { "type": "string", "maxLength": 50 },
-        "totalAmount": { "type": "number" },
-        "paymentMethod": { "type": "string", "maxLength": 50 },
-        "paymentStatus": { "type": "string", "maxLength": 50 },
-        "orderStatus": { "type": "string", "maxLength": 50 },
+        "orderNumber": { "type": "string" },
+        "customerName": { "type": "string" },
+        "businessName": { "type": "string" },
+        "documentId": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "shippingAddress": { "type": "string" },
+        "city": { "type": "string" },
+        "province": { "type": "string" },
+        "shippingMethod": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "discount": { "type": "number" },
+        "total": { "type": "number" },
+        "status": { "type": "string" },
+        "notes": { "type": "string" },
         "createdAt": { "type": "string" }
       },
-      "required": ["customerName", "customerEmail", "totalAmount", "paymentMethod", "orderStatus"]
+      "required": ["orderNumber", "customerName", "phone", "shippingAddress", "city", "total", "status"]
+    },
+    "Deal": {
+      "title": "Deal",
+      "description": "CRM commercial deal and pipeline stage",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "customerName": { "type": "string" },
+        "businessName": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "city": { "type": "string" },
+        "stage": { "type": "string" },
+        "items": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "assignedSalesperson": { "type": "string" }
+      },
+      "required": ["customerName", "phone", "stage", "totalAmount"]
     },
     "Client": {
       "title": "Client",
-      "description": "Registered buyer / seller client record",
+      "description": "Wholesale client and distributor profile",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string", "maxLength": 120 },
-        "email": { "type": "string", "maxLength": 150 },
-        "phone": { "type": "string", "maxLength": 50 },
-        "address": { "type": "string", "maxLength": 300 },
-        "city": { "type": "string", "maxLength": 120 },
-        "dniCuit": { "type": "string", "maxLength": 50 },
-        "notes": { "type": "string", "maxLength": 1000 },
-        "totalOrders": { "type": "number" },
+        "name": { "type": "string" },
+        "businessName": { "type": "string" },
+        "cuitOrDni": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "city": { "type": "string" },
+        "province": { "type": "string" },
+        "tier": { "type": "string" },
         "totalSpent": { "type": "number" },
-        "lastOrderId": { "type": "string", "maxLength": 100 },
-        "lastOrderDate": { "type": "string" },
-        "createdAt": { "type": "string" },
-        "updatedAt": { "type": "string" }
+        "orderCount": { "type": "number" },
+        "notes": { "type": "string" },
+        "lastContact": { "type": "string" }
       },
-      "required": ["name", "email", "phone"]
+      "required": ["name", "businessName", "phone", "tier"]
     },
-    "Settings": {
-      "title": "Settings",
-      "description": "Store profile, profit margin default and payment gateway settings",
-      "type": "object",
-      "properties": {
-        "companyName": { "type": "string", "maxLength": 120 },
-        "email": { "type": "string", "maxLength": 150 },
-        "phone": { "type": "string", "maxLength": 50 },
-        "whatsappNumber": { "type": "string", "maxLength": 50 },
-        "defaultProfitMargin": { "type": "number" },
-        "usdExchangeRate": { "type": "number" },
-        "bankName": { "type": "string", "maxLength": 100 },
-        "bankCbuAlias": { "type": "string", "maxLength": 100 },
-        "bankAccountHolder": { "type": "string", "maxLength": 150 },
-        "updatedAt": { "type": "string" }
-      },
-      "required": ["companyName", "defaultProfitMargin"]
-    },
-    "SupplierOrder": {
-      "title": "SupplierOrder",
-      "description": "Automated purchase order to supplier based on sold customer items",
+    "Interaction": {
+      "title": "Interaction",
+      "description": "Customer interaction log or note in CRM",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "orderNumber": { "type": "string", "maxLength": 50 },
-        "customerOrderId": { "type": "string", "maxLength": 100 },
-        "customerName": { "type": "string", "maxLength": 150 },
-        "supplierName": { "type": "string", "maxLength": 120 },
-        "supplierPhone": { "type": "string", "maxLength": 50 },
-        "totalCostToPay": { "type": "number" },
-        "totalCostUsd": { "type": "number" },
-        "customerSaleTotal": { "type": "number" },
-        "estimatedProfit": { "type": "number" },
-        "status": { "type": "string", "maxLength": 50 },
+        "clientId": { "type": "string" },
+        "dealId": { "type": "string" },
+        "type": { "type": "string" },
+        "note": { "type": "string" },
         "createdAt": { "type": "string" }
       },
-      "required": ["orderNumber", "supplierName", "totalCostToPay", "status"]
+      "required": ["type", "note", "createdAt"]
+    },
+    "CompanySettings": {
+      "title": "CompanySettings",
+      "description": "Company data and payment methods configuration",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string" },
+        "legalName": { "type": "string" },
+        "cuit": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "minimumOrder": { "type": "number" },
+        "bankName": { "type": "string" },
+        "accountHolder": { "type": "string" },
+        "cbu": { "type": "string" },
+        "alias": { "type": "string" },
+        "cardPaymentsEnabled": { "type": "boolean" },
+        "installmentsAllowed": { "type": "array" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["companyName", "legalName", "cuit", "cbu", "alias"]
+    },
+    "SupplierSource": {
+      "title": "SupplierSource",
+      "description": "Connected wholesale supplier e-commerce website",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "url": { "type": "string" },
+        "platform": { "type": "string" },
+        "skuPrefix": { "type": "string" },
+        "defaultMarginPercent": { "type": "number" },
+        "status": { "type": "string" },
+        "lastSyncAt": { "type": "string" },
+        "productsCount": { "type": "number" }
+      },
+      "required": ["id", "name", "url", "platform", "skuPrefix", "defaultMarginPercent"]
+    },
+    "SupplierProduct": {
+      "title": "SupplierProduct",
+      "description": "Scraped or synchronized product from wholesale supplier with markup and publishing state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "supplierId": { "type": "string" },
+        "supplierName": { "type": "string" },
+        "sourceUrl": { "type": "string" },
+        "originalTitle": { "type": "string" },
+        "sanitizedTitle": { "type": "string" },
+        "originalSku": { "type": "string" },
+        "internalSku": { "type": "string" },
+        "category": { "type": "string" },
+        "costArs": { "type": "number" },
+        "previousCostArs": { "type": "number" },
+        "costChangeDelta": { "type": "number" },
+        "stock": { "type": "number" },
+        "image": { "type": "string" },
+        "marginPercent": { "type": "number" },
+        "fixedMarkupArs": { "type": "number" },
+        "roundingRule": { "type": "string" },
+        "finalSalePrice": { "type": "number" },
+        "status": { "type": "string" },
+        "publishedProductId": { "type": "string" },
+        "lastCheckedAt": { "type": "string" },
+        "hasCostChanged": { "type": "boolean" }
+      },
+      "required": ["id", "supplierId", "sanitizedTitle", "internalSku", "costArs", "finalSalePrice", "status"]
     }
   },
   "firestore": {
     "/products/{productId}": {
       "schema": "Product",
-      "description": "Catalog of available dropshipping products"
+      "description": "Public catalog items"
     },
     "/orders/{orderId}": {
       "schema": "Order",
-      "description": "Orders placed by customers"
+      "description": "Orders created by buyers and tracked in CRM"
+    },
+    "/deals/{dealId}": {
+      "schema": "Deal",
+      "description": "Sales pipeline commercial opportunities"
     },
     "/clients/{clientId}": {
       "schema": "Client",
-      "description": "Registered buyer and seller clients"
+      "description": "Wholesale client directory"
     },
-    "/supplier_orders/{orderId}": {
-      "schema": "SupplierOrder",
-      "description": "Purchase orders generated for suppliers based on sold customer products"
+    "/interactions/{interactionId}": {
+      "schema": "Interaction",
+      "description": "CRM interaction notes and history"
     },
-    "/settings/{settingsId}": {
-      "schema": "Settings",
-      "description": "Company, margin, dollar exchange rate and payment details"
+    "/settings/{settingId}": {
+      "schema": "CompanySettings",
+      "description": "Company profile and payment method settings"
+    },
+    "/suppliers/{supplierId}": {
+      "schema": "SupplierSource",
+      "description": "Connected wholesale supplier web sources"
+    },
+    "/supplier_products/{productId}": {
+      "schema": "SupplierProduct",
+      "description": "Imported and synchronized supplier catalog items"
     }
   }
 }

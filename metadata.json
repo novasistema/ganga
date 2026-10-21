@@ -1,7 +1,8 @@
 {
-  "name": "DropStore Pro - Dropshipping & CRM",
-  "description": "Plataforma de dropshipping y e-commerce con extractor de productos por link, cálculo dinámico de márgenes de ganancia, CRM administrativo, inventario en tiempo real y pasarela de pago integrada.",
+  "name": "Remix SalesFlow CRM Store REVENTA",
+  "description": "A high-conversion online store with integrated CRM, featuring a sophisticated, catalog-inspired aesthetic for professional sales performance.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
-
