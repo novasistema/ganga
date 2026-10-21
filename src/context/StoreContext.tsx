@@ -1,437 +1,313 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  Product, 
-  CartItem, 
-  Deal, 
-  Client, 
-  Order, 
-  DealStage, 
-  OrderStatus, 
-  Interaction, 
-  CompanySettings, 
-  CrmNotification,
-  SupplierSource,
-  SupplierProduct,
-  RoundingRule
+import {
+  collection,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy
+} from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import {
+  Product,
+  Order,
+  CompanySettings,
+  CartItem,
+  HeroBannerItem,
+  StoreCategory,
+  CustomerClient,
+  SupplierPurchaseOrder,
+  SupplierOrderItem
 } from '../types';
-import { INITIAL_PRODUCTS, CATALOG_CATEGORIES } from '../data/products';
-import { INITIAL_DEALS, INITIAL_CLIENTS, INITIAL_ORDERS, INITIAL_INTERACTIONS, INITIAL_NOTIFICATIONS } from '../data/crmMockData';
-import { DEFAULT_COMPANY_SETTINGS } from '../data/defaultSettings';
-import { INITIAL_SUPPLIER_SOURCES, INITIAL_SUPPLIER_PRODUCTS } from '../data/supplierMockData';
-import { calculateUnitPrice, formatCurrency } from '../utils/formatters';
-import { playNotificationSound } from '../utils/sound';
-import { resolveProductImage } from '../utils/imageUtils';
-import { testConnection } from '../firebase';
-import { calculateSalePrice, simulateScrapingExtractor } from '../utils/supplierUtils';
-import { 
-  seedInitialDataIfEmpty,
-  subscribeToProducts,
-  subscribeToOrders,
-  subscribeToDeals,
-  subscribeToClients,
-  subscribeToInteractions,
-  subscribeToSettings,
-  subscribeToNotifications,
-  subscribeToSuppliers,
-  subscribeToSupplierProducts,
-  saveOrderToFirestore,
-  updateOrderStatusInFirestore,
-  saveDealToFirestore,
-  updateDealStageInFirestore,
-  deleteDealFromFirestore,
-  saveClientToFirestore,
-  saveInteractionToFirestore,
-  saveSettingsToFirestore,
-  saveProductToFirestore,
-  deleteProductFromFirestore,
-  saveNotificationToFirestore,
-  updateNotificationInFirestore,
-  deleteNotificationFromFirestore,
-  saveSupplierToFirestore,
-  deleteSupplierFromFirestore,
-  saveSupplierProductToFirestore,
-  batchSaveSupplierProductsToFirestore,
-  deleteSupplierProductFromFirestore
-} from '../services/firebaseSync';
+import { DEFAULT_SETTINGS, INITIAL_PRODUCTS, DEFAULT_BANNERS, DEFAULT_CATEGORIES } from '../data/initialData';
+import { DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
 interface StoreContextType {
   products: Product[];
-  addProduct: (product: Omit<Product, 'id'>) => Promise<void>;
-  updateProduct: (product: Product) => Promise<void>;
-  deleteProduct: (productId: string) => Promise<void>;
-  cart: CartItem[];
-  addToCart: (product: Product, quantity?: number) => void;
-  updateCartQuantity: (productId: string, quantity: number) => void;
-  removeFromCart: (productId: string) => void;
-  clearCart: () => void;
-  cartTotal: number;
-  cartItemCount: number;
-  isMinimumReached: boolean;
-  minimumRemaining: number;
-  // CRM
-  deals: Deal[];
-  addDeal: (deal: Omit<Deal, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
-  updateDealStage: (dealId: string, stage: DealStage) => Promise<void>;
-  updateDeal: (deal: Deal) => Promise<void>;
-  deleteDeal: (dealId: string) => Promise<void>;
-  clients: Client[];
-  addClient: (client: Omit<Client, 'id' | 'totalSpent' | 'orderCount' | 'lastContact'>) => Promise<void>;
   orders: Order[];
-  placeOrder: (orderData: Omit<Order, 'id' | 'orderNumber' | 'createdAt'>) => Promise<Order>;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
-  interactions: Interaction[];
-  addInteraction: (data: Omit<Interaction, 'id' | 'createdAt'>) => Promise<void>;
-  // Notifications & Realtime Alerts
-  notifications: CrmNotification[];
-  unreadNotificationsCount: number;
-  urgentNotificationsCount: number;
-  addNotification: (notification: Omit<CrmNotification, 'id' | 'createdAt' | 'isRead'>) => Promise<CrmNotification>;
-  markNotificationAsRead: (notificationId: string) => Promise<void>;
-  markAllNotificationsAsRead: () => Promise<void>;
-  deleteNotification: (notificationId: string) => Promise<void>;
-  clearAllNotifications: () => Promise<void>;
-  activeToastNotification: CrmNotification | null;
-  dismissToast: () => void;
-  isSoundEnabled: boolean;
-  toggleSound: () => void;
-  simulateIncomingOrder: () => Promise<void>;
-  simulateUrgentInteraction: () => Promise<void>;
-  selectedEntityForFocus: { type: 'order' | 'client' | 'deal'; id: string } | null;
-  setSelectedEntityForFocus: (entity: { type: 'order' | 'client' | 'deal'; id: string } | null) => void;
-  // Company & Payment Settings
-  companySettings: CompanySettings;
-  updateCompanySettings: (settings: CompanySettings) => Promise<void>;
-  // CRM Auth
-  isCrmAuthenticated: boolean;
-  crmUser: { email: string; name: string; role: string } | null;
-  loginCrm: (userOrEmail: string, pass: string) => boolean;
-  logoutCrm: () => void;
-  // Navigation & Modals
-  activeTab: 'store' | 'crm' | 'quotation';
-  setActiveTab: (tab: 'store' | 'crm' | 'quotation') => void;
-  selectedProductForModal: Product | null;
-  setSelectedProductForModal: (product: Product | null) => void;
+  clients: CustomerClient[];
+  supplierOrders: SupplierPurchaseOrder[];
+  settings: CompanySettings;
+  cart: CartItem[];
+  cartCount: number;
+  cartTotal: number;
   isCartOpen: boolean;
-  setIsCartOpen: (open: boolean) => void;
   isCheckoutOpen: boolean;
+  selectedProduct: Product | null;
+  activeCategory: string;
+  searchQuery: string;
+  isLoading: boolean;
+  setIsCartOpen: (open: boolean) => void;
   setIsCheckoutOpen: (open: boolean) => void;
-  isFirebaseConnected: boolean;
-  // Product Management Modal & Batch Operations
-  productToEdit: Product | null;
-  setProductToEdit: (product: Product | null) => void;
-  isProductEditModalOpen: boolean;
-  setIsProductEditModalOpen: (open: boolean) => void;
-  openCreateProductModal: () => void;
-  openEditProductModal: (product: Product) => void;
-  closeProductEditModal: () => void;
-  batchUpdatePrices: (percentage: number, category?: string) => Promise<void>;
-  resetCatalogToDefault: () => Promise<void>;
-  // Dynamic Categories
-  catalogCategories: string[];
-  addCustomCategory: (categoryName: string) => void;
-  // Suppliers & Dropshipping Sync
-  supplierSources: SupplierSource[];
-  supplierProducts: SupplierProduct[];
-  addSupplierSource: (source: Omit<SupplierSource, 'id' | 'productsCount' | 'lastSyncAt'>) => Promise<SupplierSource>;
-  updateSupplierSource: (source: SupplierSource) => Promise<void>;
-  deleteSupplierSource: (sourceId: string) => Promise<void>;
-  addSupplierProduct: (prod: Omit<SupplierProduct, 'id'>) => Promise<void>;
-  updateSupplierProduct: (prod: SupplierProduct) => Promise<void>;
-  deleteSupplierProduct: (prodId: string) => Promise<void>;
-  publishSupplierProductToStore: (supplierProd: SupplierProduct) => Promise<void>;
-  unpublishSupplierProductFromStore: (supplierProd: SupplierProduct) => Promise<void>;
-  batchPublishSupplierProducts: (productIds: string[]) => Promise<void>;
-  batchImportSupplierProducts: (
-    productsToImport: SupplierProduct[],
-    autoPublishToStore?: boolean
-  ) => Promise<{ importedCount: number; publishedCount: number; newCategories: string[] }>;
-  batchApplyMarkup: (options: {
-    supplierId?: string;
-    category?: string;
-    marginPercent: number;
-    fixedMarkupArs: number;
-    roundingRule: RoundingRule;
-    onlyCostChanged?: boolean;
-    productIds?: string[];
-  }) => Promise<number>;
-  batchSyncSupplierProducts: (supplierId?: string) => Promise<{ updatedCount: number; changedCostCount: number }>;
-  extractProductsFromUrl: (url: string, supplierId: string, options?: { customMargin?: number; customMarkup?: number; rounding?: RoundingRule }) => Promise<SupplierProduct[]>;
+  setSelectedProduct: (product: Product | null) => void;
+  setActiveCategory: (cat: string) => void;
+  setSearchQuery: (q: string) => void;
+  addToCart: (product: Product, quantity?: number) => void;
+  removeFromCart: (productId: string) => void;
+  updateCartQuantity: (productId: string, quantity: number) => void;
+  clearCart: () => void;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<string>;
+  addMultipleProducts: (products: Product[]) => Promise<number>;
+  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
+  deleteProduct: (id: string) => Promise<void>;
+  deleteMultipleProducts: (ids: string[]) => Promise<void>;
+  updateStock: (id: string, newStock: number) => Promise<void>;
+  updateGlobalMarkup: (marginPercentage: number) => Promise<void>;
+  saveSettings: (settings: CompanySettings) => Promise<void>;
+  categories: StoreCategory[];
+  addCategory: (category: Omit<StoreCategory, 'id'>) => Promise<string>;
+  updateCategory: (id: string, updates: Partial<StoreCategory>) => Promise<void>;
+  deleteCategory: (id: string) => Promise<void>;
+  ensureCategoryExists: (categoryName: string, icon?: string) => Promise<string>;
+  banners: HeroBannerItem[];
+  saveBanners: (banners: HeroBannerItem[]) => Promise<void>;
+  isBudgetTrackingOpen: boolean;
+  trackingOrderId: string;
+  setIsBudgetTrackingOpen: (open: boolean) => void;
+  setTrackingOrderId: (id: string) => void;
+  isSuperOfertasOpen: boolean;
+  setIsSuperOfertasOpen: (open: boolean) => void;
+  createOrder: (orderData: Omit<Order, 'id' | 'createdAt'>) => Promise<string>;
+  verifyAndSendBudget: (orderId: string, updatedItems: any[], notes: string, adjustedTotal: number) => Promise<string>;
+  generateMercadoPagoLink: (order: Order) => Promise<{ initPoint: string; deepLink: string; preferenceId: string }>;
+  markOrderAsPaid: (orderId: string, method: string, proofUrl?: string) => Promise<void>;
+  updateOrderStatus: (orderId: string, status: Order['orderStatus']) => Promise<void>;
+  updatePaymentStatus: (orderId: string, status: Order['paymentStatus']) => Promise<void>;
+  resetToInitialCatalog: () => Promise<void>;
+  addClient: (client: Omit<CustomerClient, 'id' | 'createdAt' | 'totalOrders' | 'totalSpent'>) => Promise<string>;
+  updateClient: (id: string, updates: Partial<CustomerClient>) => Promise<void>;
+  deleteClient: (id: string) => Promise<void>;
+  createSupplierOrder: (order: Omit<SupplierPurchaseOrder, 'id' | 'createdAt'>) => Promise<string>;
+  createSupplierOrdersFromCustomerOrder: (customerOrder: Order) => Promise<SupplierPurchaseOrder[]>;
+  updateSupplierOrderStatus: (orderId: string, status: SupplierPurchaseOrder['status'], notes?: string) => Promise<void>;
+  deleteSupplierOrder: (orderId: string) => Promise<void>;
+  syncProductCostFromLink: (productId: string, customUrl?: string) => Promise<{
+    success: boolean;
+    oldCost: number;
+    newCost: number;
+    newFinalPrice: number;
+    priceChanged: boolean;
+    diff: number;
+    supplierName?: string;
+    message: string;
+  }>;
+  syncAllProductCostsFromLinks: () => Promise<{
+    total: number;
+    updated: number;
+    unchanged: number;
+    failed: number;
+    results: any[];
+  }>;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
-  const [deals, setDeals] = useState<Deal[]>(INITIAL_DEALS);
-  const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
-  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
-  const [interactions, setInteractions] = useState<Interaction[]>(INITIAL_INTERACTIONS);
-  const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
-
-  // Supplier Sources and Scraped/Synchronized Products state
-  const [supplierSources, setSupplierSources] = useState<SupplierSource[]>(() => {
+  const [products, setProducts] = useState<Product[]>(() => {
     try {
-      const saved = localStorage.getItem('nuvoh_suppliers');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_SUPPLIER_SOURCES;
+      const cached = localStorage.getItem('dropstore_cached_products');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {
-      return INITIAL_SUPPLIER_SOURCES;
+      // ignore
     }
+    return INITIAL_PRODUCTS;
   });
-
-  const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>(() => {
-    try {
-      const saved = localStorage.getItem('nuvoh_supplier_products');
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_SUPPLIER_PRODUCTS;
-    } catch {
-      return INITIAL_SUPPLIER_PRODUCTS;
-    }
-  });
-
-  // Persist suppliers locally
-  useEffect(() => {
-    localStorage.setItem('nuvoh_suppliers', JSON.stringify(supplierSources));
-  }, [supplierSources]);
-
-  useEffect(() => {
-    localStorage.setItem('nuvoh_supplier_products', JSON.stringify(supplierProducts));
-  }, [supplierProducts]);
-
-  // Custom / Dynamic Categories state
-  const [customCategories, setCustomCategories] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('nuvoh_custom_categories');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('nuvoh_custom_categories', JSON.stringify(customCategories));
-  }, [customCategories]);
-
-  const addCustomCategory = (categoryName: string) => {
-    const clean = (categoryName || '').trim();
-    if (!clean) return;
-    setCustomCategories((prev) => (prev.includes(clean) ? prev : [...prev, clean]));
-  };
-
-  const catalogCategories = React.useMemo(() => {
-    const set = new Set<string>();
-    set.add('Todos');
-    CATALOG_CATEGORIES.forEach((c) => set.add(c));
-    customCategories.forEach((c) => { if (c && c.trim()) set.add(c.trim()); });
-    products.forEach((p) => { if (p?.category && p.category.trim()) set.add(p.category.trim()); });
-    supplierProducts.forEach((sp) => { if (sp?.category && sp.category.trim()) set.add(sp.category.trim()); });
-    return Array.from(set);
-  }, [customCategories, products, supplierProducts]);
-
-  // Company and Payment Settings state
-  const [companySettings, setCompanySettings] = useState<CompanySettings>(() => {
-    try {
-      const saved = localStorage.getItem('nuvoh_settings');
-      return saved ? JSON.parse(saved) : DEFAULT_COMPANY_SETTINGS;
-    } catch {
-      return DEFAULT_COMPANY_SETTINGS;
-    }
-  });
-
-  // CRM Authentication state
-  const [isCrmAuthenticated, setIsCrmAuthenticated] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('nuvoh_crm_auth') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
-  const [crmUser, setCrmUser] = useState<{ email: string; name: string; role: string } | null>(() => {
-    try {
-      const saved = localStorage.getItem('nuvoh_crm_user');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  const loginCrm = (userOrEmail: string, pass: string): boolean => {
-    const cleanUser = userOrEmail.trim().toLowerCase();
-    const cleanPass = pass.trim();
-
-    // Valid credentials: admin / admin123, admin@nuvoh.com.ar / admin123, or user email ajnovasistemas@gmail.com
-    const isValidUser = cleanUser === 'admin' || 
-                        cleanUser === 'admin@nuvoh.com.ar' || 
-                        cleanUser === 'ajnovasistemas@gmail.com' ||
-                        cleanUser.includes('@');
-                        
-    const isValidPass = cleanPass === 'admin123' || cleanPass === 'admin' || cleanPass === 'nuvoh2026' || cleanPass.length >= 4;
-
-    if (isValidUser && isValidPass) {
-      const user = {
-        name: cleanUser.includes('ajnova') ? 'Agustín Novoa' : 'Administrador NUVOH',
-        email: cleanUser.includes('@') ? cleanUser : 'admin@nuvoh.com.ar',
-        role: 'Gerente Comercial & Distribución'
-      };
-      setIsCrmAuthenticated(true);
-      setCrmUser(user);
-      localStorage.setItem('nuvoh_crm_auth', 'true');
-      localStorage.setItem('nuvoh_crm_user', JSON.stringify(user));
-      return true;
-    }
-    return false;
-  };
-
-  const logoutCrm = () => {
-    setIsCrmAuthenticated(false);
-    setCrmUser(null);
-    localStorage.removeItem('nuvoh_crm_auth');
-    localStorage.removeItem('nuvoh_crm_user');
-  };
-
-  const updateCompanySettings = async (newSettings: CompanySettings) => {
-    setCompanySettings(newSettings);
-    localStorage.setItem('nuvoh_settings', JSON.stringify(newSettings));
-    try {
-      await saveSettingsToFirestore(newSettings);
-    } catch (e) {
-      console.error('Failed to save settings to Firestore:', e);
-    }
-  };
-
-  // Cart state persisted locally
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [clients, setClients] = useState<CustomerClient[]>([]);
+  const [supplierOrders, setSupplierOrders] = useState<SupplierPurchaseOrder[]>([]);
+  const [settings, setSettings] = useState<CompanySettings>(DEFAULT_SETTINGS);
   const [cart, setCart] = useState<CartItem[]>(() => {
     try {
-      const saved = localStorage.getItem('nuvoh_cart');
+      const saved = localStorage.getItem('dropstore_cart');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
 
-  // Notifications and Real-time Alerts state
-  const [notifications, setNotifications] = useState<CrmNotification[]>(() => {
-    try {
-      const saved = localStorage.getItem('nuvoh_crm_notifications');
-      return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
-    } catch {
-      return INITIAL_NOTIFICATIONS;
-    }
-  });
-
-  const [activeToastNotification, setActiveToastNotification] = useState<CrmNotification | null>(null);
-
-  const [isSoundEnabled, setIsSoundEnabled] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('nuvoh_crm_sound') !== 'false';
-    } catch {
-      return true;
-    }
-  });
-
-  const [selectedEntityForFocus, setSelectedEntityForFocus] = useState<{ type: 'order' | 'client' | 'deal'; id: string } | null>(null);
-
-  const unreadNotificationsCount = notifications.filter((n) => !n.isRead).length;
-  const urgentNotificationsCount = notifications.filter((n) => !n.isRead && (n.priority === 'urgent' || n.type === 'urgent_interaction')).length;
-
-  // Persist notifications locally
-  useEffect(() => {
-    localStorage.setItem('nuvoh_crm_notifications', JSON.stringify(notifications));
-  }, [notifications]);
-
-  // Auto-dismiss toast
-  useEffect(() => {
-    if (activeToastNotification) {
-      const timer = setTimeout(() => {
-        setActiveToastNotification(null);
-      }, 7000);
-      return () => clearTimeout(timer);
-    }
-  }, [activeToastNotification]);
-
-  // UI state
-  const [activeTab, setActiveTab] = useState<'store' | 'crm' | 'quotation'>('store');
-  const [selectedProductForModal, setSelectedProductForModal] = useState<Product | null>(null);
-  const [productToEdit, setProductToEdit] = useState<Product | null>(null);
-  const [isProductEditModalOpen, setIsProductEditModalOpen] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string>('Todos');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isBudgetTrackingOpen, setIsBudgetTrackingOpen] = useState(false);
+  const [trackingOrderId, setTrackingOrderId] = useState<string>('');
+  const [isSuperOfertasOpen, setIsSuperOfertasOpen] = useState(false);
 
-  const openCreateProductModal = () => {
-    setProductToEdit(null);
-    setIsProductEditModalOpen(true);
-  };
-
-  const openEditProductModal = (product: Product) => {
-    setProductToEdit(product);
-    setIsProductEditModalOpen(true);
-  };
-
-  const closeProductEditModal = () => {
-    setProductToEdit(null);
-    setIsProductEditModalOpen(false);
-  };
-
-  // Initialize Firebase and Real-Time Listeners
+  // Sync cart to localStorage
   useEffect(() => {
-    let unsubs: (() => void)[] = [];
-
-    async function init() {
-      const connected = await testConnection();
-      setIsFirebaseConnected(connected);
-
-      if (connected) {
-        await seedInitialDataIfEmpty();
-        
-        const unsubProds = subscribeToProducts((prods) => setProducts(prods));
-        const unsubOrders = subscribeToOrders((ords) => setOrders(ords));
-        const unsubDeals = subscribeToDeals((dls) => setDeals(dls));
-        const unsubClients = subscribeToClients((cls) => setClients(cls));
-        const unsubInteractions = subscribeToInteractions((ints) => setInteractions(ints));
-        const unsubSettings = subscribeToSettings((sets) => setCompanySettings(sets));
-        const unsubNotifs = subscribeToNotifications((notifs) => setNotifications(notifs));
-        const unsubSupps = subscribeToSuppliers((supps) => setSupplierSources(supps));
-        const unsubSuppProds = subscribeToSupplierProducts((prods) => setSupplierProducts(prods));
-
-        unsubs = [unsubProds, unsubOrders, unsubDeals, unsubClients, unsubInteractions, unsubSettings, unsubNotifs, unsubSupps, unsubSuppProds];
-      }
+    try {
+      localStorage.setItem('dropstore_cart', JSON.stringify(cart));
+    } catch {
+      // ignore
     }
+  }, [cart]);
 
-    init();
+  // 1. Sync Settings from Firestore
+  useEffect(() => {
+    const settingsDocRef = doc(db, 'settings', 'store_config');
+    const unsubSettings = onSnapshot(
+      settingsDocRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          setSettings(docSnap.data() as CompanySettings);
+        } else {
+          // Initialize with default settings in Firestore
+          setDoc(settingsDocRef, DEFAULT_SETTINGS).catch((err) => {
+            console.warn('Could not auto-seed settings in Firestore:', err.message);
+          });
+        }
+      },
+      (error) => {
+        console.warn('Settings onSnapshot error (using local default):', error.message);
+      }
+    );
 
-    return () => {
-      unsubs.forEach((unsub) => unsub());
-    };
+    return () => unsubSettings();
   }, []);
 
+  // 2. Sync Products from Firestore
   useEffect(() => {
-    localStorage.setItem('nuvoh_cart', JSON.stringify(cart));
-  }, [cart]);
+    const productsColRef = collection(db, 'products');
+    const unsubProducts = onSnapshot(
+      productsColRef,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const list: Product[] = [];
+          snapshot.forEach((d) => {
+            list.push({ id: d.id, ...d.data() } as Product);
+          });
+          setProducts(list);
+          try {
+            localStorage.setItem('dropstore_cached_products', JSON.stringify(list));
+            localStorage.setItem('dropstore_initialized', 'true');
+          } catch {}
+        } else {
+          // If never initialized before in this browser/installation, seed once
+          const isInit = localStorage.getItem('dropstore_initialized');
+          if (!isInit) {
+            seedInitialProducts();
+          } else {
+            // User intentionally cleared or deleted products
+            setProducts([]);
+            try {
+              localStorage.setItem('dropstore_cached_products', JSON.stringify([]));
+            } catch {}
+          }
+        }
+        setIsLoading(false);
+      },
+      (error) => {
+        console.warn('Products onSnapshot error, falling back to local list:', error.message);
+        setIsLoading(false);
+      }
+    );
+
+    return () => unsubProducts();
+  }, []);
+
+  // 3. Sync Orders from Firestore
+  useEffect(() => {
+    const ordersColRef = collection(db, 'orders');
+    const q = query(ordersColRef, orderBy('createdAt', 'desc'));
+    const unsubOrders = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: Order[] = [];
+        snapshot.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as Order);
+        });
+        setOrders(list);
+      },
+      (error) => {
+        console.warn('Orders onSnapshot error:', error.message);
+      }
+    );
+
+    return () => unsubOrders();
+  }, []);
+
+  // 4. Sync Clients from Firestore
+  useEffect(() => {
+    const clientsColRef = collection(db, 'clients');
+    const q = query(clientsColRef, orderBy('createdAt', 'desc'));
+    const unsubClients = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: CustomerClient[] = [];
+        snapshot.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as CustomerClient);
+        });
+        setClients(list);
+      },
+      (error) => {
+        console.warn('Clients onSnapshot error:', error.message);
+      }
+    );
+
+    return () => unsubClients();
+  }, []);
+
+  // 5. Sync Supplier Purchase Orders from Firestore
+  useEffect(() => {
+    const supColRef = collection(db, 'supplier_orders');
+    const q = query(supColRef, orderBy('createdAt', 'desc'));
+    const unsubSupplierOrders = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: SupplierPurchaseOrder[] = [];
+        snapshot.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as SupplierPurchaseOrder);
+        });
+        setSupplierOrders(list);
+      },
+      (error) => {
+        console.warn('Supplier orders onSnapshot error:', error.message);
+      }
+    );
+
+    return () => unsubSupplierOrders();
+  }, []);
+
+  // Function to seed initial catalog to Firestore
+  const seedInitialProducts = async () => {
+    try {
+      for (const prod of INITIAL_PRODUCTS) {
+        await setDoc(doc(db, 'products', prod.id), prod);
+      }
+      setProducts(INITIAL_PRODUCTS);
+    } catch (e) {
+      console.warn('Could not seed products to Firestore:', e);
+    }
+  };
+
+  const resetToInitialCatalog = async () => {
+    await seedInitialProducts();
+  };
 
   // Cart operations
   const addToCart = (product: Product, quantity = 1) => {
     setCart((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
-      let newQuantity = quantity;
-      if (existing) {
-        newQuantity = existing.quantity + quantity;
-      }
-
-      const unitPriceApplied = calculateUnitPrice(product, newQuantity);
-      const totalPrice = unitPriceApplied * newQuantity;
-
       if (existing) {
         return prev.map((item) =>
           item.product.id === product.id
-            ? { ...item, quantity: newQuantity, unitPriceApplied, totalPrice }
+            ? { ...item, quantity: item.quantity + quantity }
             : item
         );
       }
-
-      return [...prev, { product, quantity: newQuantity, unitPriceApplied, totalPrice }];
+      return [...prev, { product, quantity }];
     });
-    setIsCartOpen(true);
+  };
+
+  const removeFromCart = (productId: string) => {
+    setCart((prev) => prev.filter((item) => item.product.id !== productId));
   };
 
   const updateCartQuantity = (productId: string, quantity: number) => {
@@ -439,1002 +315,866 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       removeFromCart(productId);
       return;
     }
-
     setCart((prev) =>
-      prev.map((item) => {
-        if (item.product.id === productId) {
-          const unitPriceApplied = calculateUnitPrice(item.product, quantity);
-          return {
-            ...item,
-            quantity,
-            unitPriceApplied,
-            totalPrice: unitPriceApplied * quantity
-          };
-        }
-        return item;
-      })
+      prev.map((item) =>
+        item.product.id === productId ? { ...item, quantity } : item
+      )
     );
-  };
-
-  const removeFromCart = (productId: string) => {
-    setCart((prev) => prev.filter((item) => item.product.id !== productId));
   };
 
   const clearCart = () => {
     setCart([]);
   };
 
-  const cartTotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
-  const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const isMinimumReached = cartTotal >= companySettings.minimumOrder;
-  const minimumRemaining = Math.max(0, companySettings.minimumOrder - cartTotal);
+  const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const cartTotal = cart.reduce(
+    (sum, item) => sum + item.product.finalPrice * item.quantity,
+    0
+  );
 
-  // CRM Deals operations
-  const addDeal = async (dealData: Omit<Deal, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newDeal: Deal = {
-      ...dealData,
-      id: `deal-${Date.now()}`,
-      createdAt: new Date().toISOString().split('T')[0],
-      updatedAt: new Date().toISOString().split('T')[0]
-    };
-    setDeals((prev) => [newDeal, ...prev]);
-    try {
-      await saveDealToFirestore(newDeal);
-    } catch (e) {
-      console.error('Failed to save deal to Firestore:', e);
-    }
-  };
-
-  const updateDealStage = async (dealId: string, stage: DealStage) => {
-    setDeals((prev) =>
-      prev.map((deal) =>
-        deal.id === dealId
-          ? { ...deal, stage, updatedAt: new Date().toISOString().split('T')[0] }
-          : deal
-      )
-    );
-    try {
-      await updateDealStageInFirestore(dealId, stage);
-    } catch (e) {
-      console.error('Failed to update deal stage in Firestore:', e);
-    }
-  };
-
-  const updateDeal = async (updatedDeal: Deal) => {
-    setDeals((prev) =>
-      prev.map((deal) => (deal.id === updatedDeal.id ? updatedDeal : deal))
-    );
-    try {
-      await saveDealToFirestore(updatedDeal);
-    } catch (e) {
-      console.error('Failed to update deal in Firestore:', e);
-    }
-  };
-
-  const deleteDeal = async (dealId: string) => {
-    setDeals((prev) => prev.filter((deal) => deal.id !== dealId));
-    try {
-      await deleteDealFromFirestore(dealId);
-    } catch (e) {
-      console.error('Failed to delete deal from Firestore:', e);
-    }
-  };
-
-  const addClient = async (clientData: Omit<Client, 'id' | 'totalSpent' | 'orderCount' | 'lastContact'>) => {
-    const newClient: Client = {
-      ...clientData,
-      id: `cli-${Date.now()}`,
-      totalSpent: 0,
-      orderCount: 0,
-      lastContact: new Date().toISOString().split('T')[0]
-    };
-    setClients((prev) => [newClient, ...prev]);
-    try {
-      await saveClientToFirestore(newClient);
-    } catch (e) {
-      console.error('Failed to save client to Firestore:', e);
-    }
-  };
-
-  const placeOrder = async (orderData: Omit<Order, 'id' | 'orderNumber' | 'createdAt'>): Promise<Order> => {
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const orderNumber = `NUV-${new Date().getFullYear()}-${randomSuffix}`;
-    const newOrder: Order = {
-      ...orderData,
-      id: `ord-${Date.now()}`,
-      orderNumber,
-      createdAt: new Date().toLocaleString('es-AR')
-    };
-
-    setOrders((prev) => [newOrder, ...prev]);
-
-    // Save to Firestore
-    try {
-      await saveOrderToFirestore(newOrder);
-    } catch (e) {
-      console.error('Failed to save order to Firestore:', e);
-    }
-
-    // Auto-create or advance a deal in the CRM pipeline for this new order
-    await addDeal({
-      customerName: newOrder.customerName,
-      businessName: newOrder.businessName || 'Cliente Web',
-      phone: newOrder.phone,
-      email: newOrder.email,
-      city: `${newOrder.city}, ${newOrder.province}`,
-      stage: newOrder.paymentMethod === 'tarjeta_segura' ? 'payment_pending' : 'payment_pending',
-      items: newOrder.items.map((i) => ({
-        productId: i.product.id,
-        productName: i.product.name,
-        quantity: i.quantity,
-        unitPrice: i.unitPriceApplied
-      })),
-      totalAmount: newOrder.total,
-      notes: `Pedido web ${orderNumber}. Factura ${newOrder.invoiceType}. Pago: ${newOrder.paymentMethod}. Envío: ${newOrder.shippingMethod} ($${newOrder.shippingCost}). Entrega: ${newOrder.shippingAddress}`
-    });
-
-    // Notify CRM staff of new incoming order
-    await addNotification({
-      type: 'new_order',
-      title: `¡Nuevo Pedido Mayorista! #${orderNumber}`,
-      message: `${newOrder.customerName} (${newOrder.businessName || 'Comercio'}) ingresó un pedido por ${formatCurrency(newOrder.total)}. Método: ${newOrder.paymentMethod.replace('_', ' ')}.`,
-      priority: 'high',
-      entityId: newOrder.id,
-      entityType: 'order',
-      metadata: {
-        orderNumber: newOrder.orderNumber,
-        total: newOrder.total,
-        clientName: newOrder.businessName || newOrder.customerName,
-        phone: newOrder.phone
-      }
-    });
-
-    clearCart();
-    return newOrder;
-  };
-
-  const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
-    setOrders((prev) =>
-      prev.map((order) => (order.id === orderId ? { ...order, status } : order))
-    );
-    try {
-      await updateOrderStatusInFirestore(orderId, status);
-    } catch (e) {
-      console.error('Failed to update order status in Firestore:', e);
-    }
-  };
-
-  const addInteraction = async (data: Omit<Interaction, 'id' | 'createdAt'>) => {
-    const newInteraction: Interaction = {
-      ...data,
-      id: `int-${Date.now()}`,
-      createdAt: new Date().toLocaleString('es-AR')
-    };
-    setInteractions((prev) => [newInteraction, ...prev]);
-    try {
-      await saveInteractionToFirestore(newInteraction);
-    } catch (e) {
-      console.error('Failed to save interaction to Firestore:', e);
-    }
-
-    // Check if this interaction requires urgent notification to sales staff
-    const isUrgent = 
-      data.urgency === 'urgent' || 
-      data.urgency === 'high' || 
-      /urgente|reclamo|inmediat|atención|problema|pago enviado|comprobante/i.test(data.note);
-
-    if (isUrgent) {
-      const client = clients.find((c) => c.id === data.clientId);
-      const clientTitle = client ? (client.businessName || client.name) : (data.clientName || 'Cliente Mayorista');
-      await addNotification({
-        type: 'urgent_interaction',
-        title: `⚠️ Interacción Urgente: ${clientTitle}`,
-        message: `${data.author || 'Vendedor'}: "${data.note}"`,
-        priority: 'urgent',
-        entityId: data.clientId,
-        entityType: 'interaction',
-        metadata: {
-          clientName: clientTitle,
-          phone: client?.phone,
-          urgencyReason: 'Atención comercial prioritaria'
-        }
-      });
-    }
-  };
-
-  // Notification Operations
-  const addNotification = async (notifData: Omit<CrmNotification, 'id' | 'createdAt' | 'isRead'>): Promise<CrmNotification> => {
-    const newNotif: CrmNotification = {
-      ...notifData,
-      id: `notif-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      createdAt: 'Ahora',
-      isRead: false
-    };
-
-    setNotifications((prev) => [newNotif, ...prev]);
-    setActiveToastNotification(newNotif);
-
-    if (isSoundEnabled) {
-      if (newNotif.type === 'urgent_interaction' || newNotif.priority === 'urgent') {
-        playNotificationSound('urgent');
-      } else if (newNotif.type === 'new_order') {
-        playNotificationSound('order');
-      } else {
-        playNotificationSound('default');
-      }
-    }
-
-    try {
-      await saveNotificationToFirestore(newNotif);
-    } catch (e) {
-      console.error('Failed to save notification to Firestore:', e);
-    }
-
-    return newNotif;
-  };
-
-  const markNotificationAsRead = async (notificationId: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
-    );
-    if (activeToastNotification?.id === notificationId) {
-      setActiveToastNotification(null);
-    }
-    try {
-      await updateNotificationInFirestore(notificationId, { isRead: true });
-    } catch (e) {
-      console.error('Failed to update notification in Firestore:', e);
-    }
-  };
-
-  const markAllNotificationsAsRead = async () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    setActiveToastNotification(null);
-    notifications.forEach((n) => {
-      if (!n.isRead) {
-        updateNotificationInFirestore(n.id, { isRead: true }).catch(() => {});
-      }
-    });
-  };
-
-  const deleteNotification = async (notificationId: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
-    if (activeToastNotification?.id === notificationId) {
-      setActiveToastNotification(null);
-    }
-    try {
-      await deleteNotificationFromFirestore(notificationId);
-    } catch (e) {
-      console.error('Failed to delete notification from Firestore:', e);
-    }
-  };
-
-  const clearAllNotifications = async () => {
-    const current = [...notifications];
-    setNotifications([]);
-    setActiveToastNotification(null);
-    current.forEach((n) => {
-      deleteNotificationFromFirestore(n.id).catch(() => {});
-    });
-  };
-
-  const dismissToast = () => {
-    setActiveToastNotification(null);
-  };
-
-  const toggleSound = () => {
-    setIsSoundEnabled((prev) => {
-      const next = !prev;
-      localStorage.setItem('nuvoh_crm_sound', String(next));
-      if (next) playNotificationSound('default');
-      return next;
-    });
-  };
-
-  const simulateIncomingOrder = async () => {
-    const demoClients = [
-      { name: 'Marcos Ferreyra', business: 'Ferretería El Cóndor', phone: '+54 9 341 555-8822', city: 'Rosario, Santa Fe' },
-      { name: 'Carla Silvestri', business: 'Bazar Central Morón', phone: '+54 9 11 6789-0123', city: 'Morón, Buenos Aires' },
-      { name: 'Lucas Valenzuela', business: 'Electro Total Nordelta', phone: '+54 9 11 4433-2211', city: 'Tigre, Buenos Aires' },
-      { name: 'Gonzalo Paéz', business: 'Bazar y Deco Cuyo', phone: '+54 9 261 498-7711', city: 'Mendoza, Mendoza' }
-    ];
-    const demo = demoClients[Math.floor(Math.random() * demoClients.length)];
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const orderNum = `NUV-2026-${randomSuffix}`;
-
-    const sampleProd = products[Math.floor(Math.random() * products.length)] || INITIAL_PRODUCTS[0];
-    const qty = 8;
-    const unitPrice = sampleProd.priceTiers.tier5 || sampleProd.priceUnit;
-
-    const newOrder: Order = {
-      id: `ord-sim-${Date.now()}`,
-      orderNumber: orderNum,
-      customerName: demo.name,
-      businessName: demo.business,
-      phone: demo.phone,
-      email: `${demo.name.toLowerCase().replace(/\s+/g, '.')}@comercio.com.ar`,
-      shippingAddress: 'Av. Libertador 1420',
-      city: demo.city.split(',')[0],
-      province: demo.city.split(',')[1]?.trim() || 'Buenos Aires',
-      shippingMethod: 'transporte_expreso',
-      shippingCost: 8500,
-      paymentMethod: 'transferencia',
-      invoiceType: 'A',
-      items: [
-        {
-          product: sampleProd,
-          quantity: qty,
-          unitPriceApplied: unitPrice,
-          totalPrice: unitPrice * qty
-        }
-      ],
-      subtotal: unitPrice * qty,
-      discount: 0,
-      taxAmount: Math.round(unitPrice * qty * 0.21),
-      total: Math.round(unitPrice * qty * 1.21) + 8500,
-      status: 'pending_payment',
-      notes: 'Pedido generado por portal mayorista web B2B. Solicitó despacho urgente por Expreso.',
-      createdAt: new Date().toLocaleString('es-AR')
-    };
-
-    setOrders((prev) => [newOrder, ...prev]);
-    saveOrderToFirestore(newOrder).catch(() => {});
-
-    // Add pipeline deal
-    await addDeal({
-      customerName: newOrder.customerName,
-      businessName: newOrder.businessName,
-      phone: newOrder.phone,
-      email: newOrder.email,
-      city: demo.city,
-      stage: 'payment_pending',
-      items: [{
-        productId: sampleProd.id,
-        productName: sampleProd.name,
-        quantity: qty,
-        unitPrice
-      }],
-      totalAmount: newOrder.total,
-      notes: `Pedido web ${orderNum}. Transferencia bancaria solicitada.`
-    });
-
-    // Dispatch real-time incoming order alert
-    await addNotification({
-      type: 'new_order',
-      title: `¡Nuevo Pedido Entrante! #${newOrder.orderNumber}`,
-      message: `${newOrder.businessName} (${newOrder.customerName}) acaba de confirmar un pedido por ${formatCurrency(newOrder.total)}. Pendiente de comprobante.`,
-      priority: 'high',
-      entityId: newOrder.id,
-      entityType: 'order',
-      metadata: {
-        orderNumber: newOrder.orderNumber,
-        total: newOrder.total,
-        clientName: newOrder.businessName,
-        phone: newOrder.phone
-      }
-    });
-  };
-
-  const simulateUrgentInteraction = async () => {
-    const urgentScenarios = [
-      {
-        clientName: 'Distribuidora Electro Centro',
-        clientId: 'cli-01',
-        phone: '+54 9 11 4982-1100',
-        reason: 'Comprobante de transferencia enviado',
-        message: 'Acabamos de transferir $585.000 por el lote de hornos. Necesitamos el número de remito y que despachen hoy antes de las 16hs por favor.'
-      },
-      {
-        clientName: 'Ferretería El Obrero',
-        clientId: 'cli-03',
-        phone: '+54 9 223 544-9988',
-        reason: 'Reserva bulto cerrado inmediata',
-        message: 'Tenemos el camión de transporte pasando por el depósito en 1 hora. ¿Tienen listas las 30 unidades de amoladoras y taladros para retirar ya mismo?'
-      },
-      {
-        clientName: 'Bazar San Martín',
-        clientId: 'cli-02',
-        phone: '+54 9 351 689-4321',
-        reason: 'Solicitud urgente de cotización por bulto',
-        message: 'Nos piden 40 pavas digitales para licitación municipal. ¿Nos pueden congelar precio especial hasta mañana a primera hora?'
-      }
-    ];
-
-    const scenario = urgentScenarios[Math.floor(Math.random() * urgentScenarios.length)];
-
-    await addInteraction({
-      clientId: scenario.clientId,
-      type: 'whatsapp',
-      note: `[CONSULTA URGENTE] ${scenario.message}`,
-      author: 'Cliente Mayorista (WhatsApp)',
-      urgency: 'urgent',
-      clientName: scenario.clientName
-    });
-  };
-
-  const addProduct = async (productData: Omit<Product, 'id'>) => {
-    const newProduct: Product = {
+  // Firestore actions
+  const addProduct = async (productData: Omit<Product, 'id'>): Promise<string> => {
+    const newId = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const fullProduct: Product = {
       ...productData,
-      id: `prod-${Date.now()}`,
-      image: resolveProductImage(productData.image, productData.category)
-    };
-    setProducts((prev) => [newProduct, ...prev]);
-    try {
-      await saveProductToFirestore(newProduct);
-    } catch (e) {
-      console.error('Failed to save product to Firestore:', e);
-    }
-  };
-
-  const updateProduct = async (updatedProduct: Product) => {
-    const normalized: Product = {
-      ...updatedProduct,
-      image: resolveProductImage(updatedProduct.image, updatedProduct.category)
-    };
-    setProducts((prev) =>
-      prev.map((p) => (p.id === normalized.id ? normalized : p))
-    );
-    try {
-      await saveProductToFirestore(normalized);
-    } catch (e) {
-      console.error('Failed to update product in Firestore:', e);
-    }
-  };
-
-  const deleteProduct = async (productId: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== productId));
-    try {
-      await deleteProductFromFirestore(productId);
-    } catch (e) {
-      console.error('Failed to delete product from Firestore:', e);
-    }
-  };
-
-  const batchUpdatePrices = async (percentage: number, category?: string) => {
-    const factor = 1 + percentage / 100;
-    const updated = products.map((p) => {
-      if (!category || category === 'Todos' || p.category === category) {
-        const roundPrice = (price: number) => Math.round((price * factor) / 100) * 100;
-        const newPriceUnit = roundPrice(p.priceUnit);
-        const newPriceTiers = {
-          tier5: p.priceTiers?.tier5 ? roundPrice(p.priceTiers.tier5) : undefined,
-          tier10: p.priceTiers?.tier10 ? roundPrice(p.priceTiers.tier10) : undefined,
-          tier100: p.priceTiers?.tier100 ? roundPrice(p.priceTiers.tier100) : undefined,
-        };
-        const updatedProd = {
-          ...p,
-          priceUnit: newPriceUnit,
-          priceTiers: newPriceTiers
-        };
-        saveProductToFirestore(updatedProd).catch(console.error);
-        return updatedProd;
-      }
-      return p;
-    });
-    setProducts(updated);
-  };
-
-  const resetCatalogToDefault = async () => {
-    setProducts(INITIAL_PRODUCTS);
-    for (const p of INITIAL_PRODUCTS) {
-      await saveProductToFirestore(p).catch(console.error);
-    }
-  };
-
-  // ==========================================
-  // SUPPLIER & DROPSHIPPING OPERATIONS
-  // ==========================================
-
-  const addSupplierSource = async (sourceData: Omit<SupplierSource, 'id' | 'productsCount' | 'lastSyncAt'>): Promise<SupplierSource> => {
-    const newSource: SupplierSource = {
-      ...sourceData,
-      id: `supp-${Date.now()}`,
-      productsCount: 0,
-      lastSyncAt: 'Recién conectado'
-    };
-    setSupplierSources((prev) => [newSource, ...prev]);
-    try {
-      await saveSupplierToFirestore(newSource);
-    } catch (e) {
-      console.error('Failed to save supplier source to Firestore:', e);
-    }
-    return newSource;
-  };
-
-  const updateSupplierSource = async (source: SupplierSource) => {
-    setSupplierSources((prev) => prev.map((s) => (s.id === source.id ? source : s)));
-    try {
-      await saveSupplierToFirestore(source);
-    } catch (e) {
-      console.error('Failed to update supplier source in Firestore:', e);
-    }
-  };
-
-  const deleteSupplierSource = async (sourceId: string) => {
-    setSupplierSources((prev) => prev.filter((s) => s.id !== sourceId));
-    try {
-      await deleteSupplierFromFirestore(sourceId);
-    } catch (e) {
-      console.error('Failed to delete supplier source in Firestore:', e);
-    }
-  };
-
-  const addSupplierProduct = async (prodData: Omit<SupplierProduct, 'id'>) => {
-    const newProd: SupplierProduct = {
-      ...prodData,
-      id: `sp-${Date.now()}`
-    };
-    setSupplierProducts((prev) => [newProd, ...prev]);
-    try {
-      await saveSupplierProductToFirestore(newProd);
-    } catch (e) {
-      console.error('Failed to save supplier product to Firestore:', e);
-    }
-
-    setSupplierSources((prev) =>
-      prev.map((s) => s.id === prodData.supplierId ? { ...s, productsCount: (s.productsCount || 0) + 1 } : s)
-    );
-  };
-
-  const updateSupplierProduct = async (prod: SupplierProduct) => {
-    setSupplierProducts((prev) => prev.map((p) => (p.id === prod.id ? prod : p)));
-    try {
-      await saveSupplierProductToFirestore(prod);
-    } catch (e) {
-      console.error('Failed to update supplier product in Firestore:', e);
-    }
-
-    // Keep live catalog synchronized if published
-    if (prod.publishedProductId) {
-      setProducts((prev) =>
-        prev.map((p) => {
-          if (p.id === prod.publishedProductId) {
-            const updatedP: Product = {
-              ...p,
-              name: prod.sanitizedTitle,
-              priceUnit: prod.finalSalePrice,
-              stock: prod.stock,
-              image: prod.image,
-              priceTiers: {
-                tier5: Math.round((prod.finalSalePrice * 0.93) / 100) * 100,
-                tier10: Math.round((prod.finalSalePrice * 0.88) / 100) * 100,
-                tier100: Math.round((prod.finalSalePrice * 0.78) / 100) * 100
-              }
-            };
-            saveProductToFirestore(updatedP).catch(console.error);
-            return updatedP;
-          }
-          return p;
-        })
-      );
-    }
-  };
-
-  const deleteSupplierProduct = async (prodId: string) => {
-    const toDelete = supplierProducts.find((p) => p.id === prodId);
-    setSupplierProducts((prev) => prev.filter((p) => p.id !== prodId));
-    try {
-      await deleteSupplierProductFromFirestore(prodId);
-    } catch (e) {
-      console.error('Failed to delete supplier product in Firestore:', e);
-    }
-    if (toDelete?.publishedProductId) {
-      deleteProduct(toDelete.publishedProductId).catch(console.error);
-    }
-  };
-
-  const publishSupplierProductToStore = async (supplierProd: SupplierProduct) => {
-    const publishedId = supplierProd.publishedProductId || `prod-sup-${supplierProd.id}`;
-    const tier5 = Math.round((supplierProd.finalSalePrice * 0.93) / 100) * 100;
-    const tier10 = Math.round((supplierProd.finalSalePrice * 0.88) / 100) * 100;
-    const tier100 = Math.round((supplierProd.finalSalePrice * 0.78) / 100) * 100;
-
-    const newCatalogProduct: Product = {
-      id: publishedId,
-      name: supplierProd.sanitizedTitle,
-      hook: `IMPORTACIÓN DIRECTA · ${supplierProd.supplierName.toUpperCase()}`,
-      category: supplierProd.category,
-      sku: supplierProd.internalSku,
-      brand: supplierProd.supplierName.split(' ')[0] || 'NUVOH Import',
-      priceUnit: supplierProd.finalSalePrice,
-      priceTiers: {
-        tier5,
-        tier10,
-        tier100
-      },
-      badges: ['DROPSHIPPING MAYORISTA', 'GARANTÍA OFICIAL', 'ENTREGA INMEDIATA'],
-      specs: supplierProd.specs && supplierProd.specs.length > 0 ? supplierProd.specs : [
-        { label: 'Proveedor', desc: supplierProd.supplierName },
-        { label: 'Stock en Depósito', desc: `${supplierProd.stock} unidades` },
-        { label: 'Garantía', desc: '12 Meses Oficial' }
-      ],
-      image: supplierProd.image,
-      stock: supplierProd.stock,
-      featured: false,
-      isNew: true
+      id: newId,
+      supplierName: productData.supplierName || (productData.supplierUrl?.includes('inova') ? 'Inova ARG' : 'Proveedor Web'),
+      supplierUrl: productData.supplierUrl || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    // Save to main products
-    setProducts((prev) => {
-      const exists = prev.some((p) => p.id === publishedId);
-      if (exists) {
-        return prev.map((p) => (p.id === publishedId ? newCatalogProduct : p));
-      }
-      return [newCatalogProduct, ...prev];
-    });
-    saveProductToFirestore(newCatalogProduct).catch(console.error);
-
-    // Update supplier product record
-    const updatedSupplierProd: SupplierProduct = {
-      ...supplierProd,
-      status: 'published',
-      publishedProductId: publishedId
-    };
-
-    setSupplierProducts((prev) =>
-      prev.map((sp) => (sp.id === supplierProd.id ? updatedSupplierProd : sp))
-    );
-    saveSupplierProductToFirestore(updatedSupplierProd).catch(console.error);
-
-    // Update supplier product counter
-    setSupplierSources((prev) =>
-      prev.map((s) => s.id === supplierProd.supplierId ? { ...s, productsCount: (s.productsCount || 0) + 1 } : s)
-    );
-
-    // Notify CRM
-    await addNotification({
-      type: 'new_order',
-      title: `Artículo Publicado en Tienda: ${supplierProd.sanitizedTitle}`,
-      message: `Se sincronizó con el catálogo central por ${formatCurrency(supplierProd.finalSalePrice)} con stock de ${supplierProd.stock} u.`,
-      priority: 'normal'
-    });
-  };
-
-  const unpublishSupplierProductFromStore = async (supplierProd: SupplierProduct) => {
-    if (supplierProd.publishedProductId) {
-      await deleteProduct(supplierProd.publishedProductId);
-    }
-    const updated: SupplierProduct = {
-      ...supplierProd,
-      status: 'hidden'
-    };
-    setSupplierProducts((prev) =>
-      prev.map((sp) => (sp.id === supplierProd.id ? updated : sp))
-    );
-    saveSupplierProductToFirestore(updated).catch(console.error);
-  };
-
-  const batchPublishSupplierProducts = async (productIds: string[]) => {
-    const toPublish = supplierProducts.filter((sp) => productIds.includes(sp.id));
-    for (const item of toPublish) {
-      await publishSupplierProductToStore(item);
+    try {
+      await setDoc(doc(db, 'products', newId), fullProduct);
+      setProducts((prev) => [fullProduct, ...prev]);
+      return newId;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `products/${newId}`);
+      // Fallback
+      setProducts((prev) => [fullProduct, ...prev]);
+      return newId;
     }
   };
 
-  const batchImportSupplierProducts = async (
-    productsToImport: SupplierProduct[],
-    autoPublishToStore = false
-  ): Promise<{ importedCount: number; publishedCount: number; newCategories: string[] }> => {
-    if (!productsToImport || productsToImport.length === 0) {
-      return { importedCount: 0, publishedCount: 0, newCategories: [] };
-    }
-
-    const newCategoriesDetected: string[] = [];
-    productsToImport.forEach((p) => {
-      if (p.category && !catalogCategories.includes(p.category)) {
-        if (!newCategoriesDetected.includes(p.category)) {
-          newCategoriesDetected.push(p.category);
-          addCustomCategory(p.category);
-        }
-      }
-    });
-
-    const supplierId = productsToImport[0]?.supplierId;
-    const supplier = supplierSources.find((s) => s.id === supplierId);
-
-    // Save all to supplierProducts state
-    setSupplierProducts((prev) => {
-      const existingIds = new Set(prev.map((item) => item.id));
-      const filteredNew = productsToImport.filter((p) => !existingIds.has(p.id));
-      return [...filteredNew, ...prev];
-    });
-
-    // Save to Firestore
-    for (const item of productsToImport) {
-      saveSupplierProductToFirestore(item).catch(console.error);
-    }
-
-    // If auto-publishing, publish to store
-    let publishedCount = 0;
-    if (autoPublishToStore) {
-      for (const item of productsToImport) {
-        await publishSupplierProductToStore(item);
-        publishedCount++;
-      }
-    }
-
-    // Update supplier count
-    if (supplierId) {
-      setSupplierSources((prev) =>
-        prev.map((s) =>
-          s.id === supplierId
-            ? { ...s, productsCount: (s.productsCount || 0) + productsToImport.length, lastSyncAt: 'Hace instantes' }
-            : s
-        )
-      );
-    }
-
-    await addNotification({
-      type: 'new_order',
-      title: `Incorporación Exitosa: ${productsToImport.length} artículos importados`,
-      message: `Se importaron ${productsToImport.length} artículos desde ${supplier?.name || 'la web proveedora'}${autoPublishToStore ? ' y fueron publicados en la tienda' : ''}.${newCategoriesDetected.length > 0 ? ` Se crearon las categorías: ${newCategoriesDetected.join(', ')}.` : ''}`,
-      priority: 'normal'
-    });
-
-    return {
-      importedCount: productsToImport.length,
-      publishedCount,
-      newCategories: newCategoriesDetected
-    };
-  };
-
-  const batchApplyMarkup = async (options: {
-    supplierId?: string;
-    category?: string;
-    marginPercent: number;
-    fixedMarkupArs: number;
-    roundingRule: RoundingRule;
-    onlyCostChanged?: boolean;
-    productIds?: string[];
-  }): Promise<number> => {
+  const addMultipleProducts = async (productsList: Product[]): Promise<number> => {
     let count = 0;
-    const safeSupplierProds = Array.isArray(supplierProducts) ? supplierProducts : [];
-    const updatedCatalogProdsMap = new Map<string, Product>();
+    const itemsSaved: Product[] = [];
 
-    const updatedSupplierProds = safeSupplierProds.map((sp) => {
-      if (!sp || typeof sp !== 'object' || !sp.id) return sp;
+    for (const p of productsList) {
+      // Always generate a unique ID for imported products so they never conflict or overwrite existing items
+      const prodId = `prod-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
-      const matchesSupplier = !options.supplierId || options.supplierId === 'all' || sp.supplierId === options.supplierId;
-      const matchesCategory = !options.category || options.category === 'Todos' || sp.category === options.category;
-      const matchesCostChanged = !options.onlyCostChanged || sp.hasCostChanged;
-      const matchesSelection = !options.productIds || options.productIds.length === 0 || options.productIds.includes(sp.id);
+      const itemToSave: Product = {
+        ...p,
+        id: prodId,
+        inStock: p.inStock !== undefined ? p.inStock : true,
+        stock: Number(p.stock) > 0 ? Number(p.stock) : 25,
+        originalPrice: Number(p.originalPrice) || 12000,
+        markupPercentage: Number(p.markupPercentage) || 35,
+        finalPrice: Number(p.finalPrice) || Math.round((Number(p.originalPrice) || 12000) * 1.35),
+        category: p.category || 'General',
+        imageUrl: p.imageUrl || DEFAULT_PRODUCT_PLACEHOLDER,
+        supplierName: p.supplierName || (p.supplierUrl?.includes('inova') ? 'Inova ARG' : 'Proveedor Web'),
+        supplierUrl: p.supplierUrl || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
 
-      if (matchesSupplier && matchesCategory && matchesCostChanged && matchesSelection) {
-        count++;
-        const cost = Number(sp.costArs) || 0;
-        const newFinalPrice = calculateSalePrice(
-          cost,
-          options.marginPercent,
-          options.fixedMarkupArs,
-          options.roundingRule
-        ) || cost;
+      try {
+        await setDoc(doc(db, 'products', prodId), itemToSave);
+      } catch (err: any) {
+        console.warn('Firebase setDoc notice:', err.message);
+      }
 
-        const updated: SupplierProduct = {
-          ...sp,
-          marginPercent: options.marginPercent,
-          fixedMarkupArs: options.fixedMarkupArs,
-          roundingRule: options.roundingRule,
-          finalSalePrice: newFinalPrice,
-          hasCostChanged: false,
-          costChangeDelta: 0
-        };
+      count++;
+      itemsSaved.push(itemToSave);
+    }
 
-        // If published in live store, collect for batch synchronization
-        if (updated.publishedProductId) {
-          const existing = products.find((p) => p.id === updated.publishedProductId);
-          if (existing) {
-            updatedCatalogProdsMap.set(updated.publishedProductId, {
-              ...existing,
-              priceUnit: newFinalPrice,
-              priceTiers: {
-                tier5: Math.round((newFinalPrice * 0.93) / 100) * 100,
-                tier10: Math.round((newFinalPrice * 0.88) / 100) * 100,
-                tier100: Math.round((newFinalPrice * 0.78) / 100) * 100
-              }
-            });
-          }
+    // Immediately update local React state so products appear at the very top of the store and inventory
+    if (itemsSaved.length > 0) {
+      setProducts((prev) => {
+        const updated = [...itemsSaved, ...prev];
+        try {
+          localStorage.setItem('dropstore_cached_products', JSON.stringify(updated));
+        } catch {
+          // ignore
         }
-
-        saveSupplierProductToFirestore(updated).catch(console.error);
         return updated;
-      }
-      return sp;
-    });
-
-    // Atomic update of supplier products
-    setSupplierProducts(updatedSupplierProds.filter((p): p is SupplierProduct => Boolean(p && p.id)));
-
-    // Atomic update of catalog products if any were affected
-    if (updatedCatalogProdsMap.size > 0) {
-      setProducts((prev) =>
-        prev.map((p) => updatedCatalogProdsMap.get(p.id) || p)
-      );
-      for (const updatedProd of updatedCatalogProdsMap.values()) {
-        saveProductToFirestore(updatedProd).catch(console.error);
-      }
+      });
     }
 
     return count;
   };
 
-  const batchSyncSupplierProducts = async (supplierId?: string): Promise<{ updatedCount: number; changedCostCount: number }> => {
-    let updatedCount = 0;
-    let changedCostCount = 0;
-
-    const updatedProds = supplierProducts.map((sp) => {
-      if (!supplierId || supplierId === 'all' || sp.supplierId === supplierId) {
-        updatedCount++;
-        // Simulate a real-world web price check: occasionally costs change
-        const shouldSimulateCostChange = Math.random() > 0.45;
-        if (shouldSimulateCostChange) {
-          changedCostCount++;
-          const deltaPct = Math.round((Math.random() * 8 + 3) * 10) / 10; // +3% to +11%
-          const factor = 1 + deltaPct / 100;
-          const newCost = Math.round(sp.costArs * factor / 100) * 100;
-          const newSalePrice = calculateSalePrice(newCost, sp.marginPercent, sp.fixedMarkupArs, sp.roundingRule);
-
-          const updated: SupplierProduct = {
-            ...sp,
-            previousCostArs: sp.costArs,
-            costArs: newCost,
-            costChangeDelta: deltaPct,
-            hasCostChanged: true,
-            finalSalePrice: newSalePrice,
-            lastCheckedAt: 'Hace instantes'
-          };
-          saveSupplierProductToFirestore(updated).catch(console.error);
-          return updated;
-        }
-
-        const refreshed = { ...sp, lastCheckedAt: 'Hace instantes' };
-        saveSupplierProductToFirestore(refreshed).catch(console.error);
-        return refreshed;
-      }
-      return sp;
-    });
-
-    setSupplierProducts(updatedProds);
-
-    // Update supplier timestamp
-    setSupplierSources((prev) =>
-      prev.map((s) => {
-        if (!supplierId || supplierId === 'all' || s.id === supplierId) {
-          const updatedSupp = { ...s, lastSyncAt: 'Hace instantes', status: 'active' as const };
-          saveSupplierToFirestore(updatedSupp).catch(console.error);
-          return updatedSupp;
-        }
-        return s;
-      })
-    );
-
-    if (changedCostCount > 0) {
-      await addNotification({
-        type: 'low_stock',
-        title: `⚠️ ${changedCostCount} Cambios de Costo Detectados en Proveedores`,
-        message: `La sincronización web detectó aumentos de costo mayorista. Revisá la calculadora de precios para actualizar márgenes.`,
-        priority: 'high'
-      });
+  const updateProduct = async (id: string, updates: Partial<Product>) => {
+    const updatedPayload = { ...updates, updatedAt: new Date().toISOString() };
+    try {
+      await updateDoc(doc(db, 'products', id), updatedPayload);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `products/${id}`);
     }
-
-    return { updatedCount, changedCostCount };
+    setProducts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, ...updatedPayload } : p))
+    );
   };
 
-  const extractProductsFromUrl = async (
-    url: string,
-    supplierId: string,
-    options?: { customMargin?: number; customMarkup?: number; rounding?: RoundingRule }
-  ): Promise<SupplierProduct[]> => {
-    const supplier = supplierSources.find((s) => s.id === supplierId) || supplierSources[0];
-    const extracted = await simulateScrapingExtractor(url, supplier, options);
+  const deleteProduct = async (id: string) => {
+    // 1. Immediately remove from React state & localStorage so UI updates instantly
+    setProducts((prev) => {
+      const updated = prev.filter((p) => p.id !== id);
+      try {
+        localStorage.setItem('dropstore_cached_products', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    removeFromCart(id);
 
-    setSupplierProducts((prev) => [...extracted, ...prev]);
-    for (const item of extracted) {
-      await saveSupplierProductToFirestore(item).catch(console.error);
+    // 2. Remove document from Firestore
+    try {
+      await deleteDoc(doc(db, 'products', id));
+    } catch (error: any) {
+      console.warn('Notice deleting product from Firestore (removed locally):', error?.message);
     }
+  };
 
-    // Update count
-    setSupplierSources((prev) =>
-      prev.map((s) => (s.id === supplier.id ? { ...s, productsCount: (s.productsCount || 0) + extracted.length, lastSyncAt: 'Hace instantes' } : s))
-    );
-
-    await addNotification({
-      type: 'new_order',
-      title: `Extracción Exitosa: ${extracted.length} artículos importados`,
-      message: `Se extrajeron productos desde ${supplier.name} (${supplier.platform}). Listos para cotizar y publicar en tienda.`,
-      priority: 'normal'
+  const deleteMultipleProducts = async (ids: string[]) => {
+    // 1. Immediately remove from React state & localStorage
+    setProducts((prev) => {
+      const updated = prev.filter((p) => !ids.includes(p.id));
+      try {
+        localStorage.setItem('dropstore_cached_products', JSON.stringify(updated));
+      } catch {}
+      return updated;
     });
 
-    return extracted;
+    for (const id of ids) {
+      removeFromCart(id);
+      try {
+        await deleteDoc(doc(db, 'products', id));
+      } catch (err: any) {
+        console.warn('Notice batch deleting from Firestore:', err?.message);
+      }
+    }
+  };
+
+  const updateStock = async (id: string, newStock: number) => {
+    const inStock = newStock > 0;
+    await updateProduct(id, { stock: newStock, inStock });
+  };
+
+  // Centralized margin updater: changes the profit markup of all products
+  const updateGlobalMarkup = async (marginPercentage: number) => {
+    const margin = Number(marginPercentage);
+    for (const prod of products) {
+      const originalPrice = prod.originalPrice || Math.round(prod.finalPrice / 1.4);
+      const newFinalPrice = Math.round(originalPrice * (1 + margin / 100));
+      await updateProduct(prod.id, {
+        markupPercentage: margin,
+        finalPrice: newFinalPrice,
+        originalPrice
+      });
+    }
+    await saveSettings({
+      ...settings,
+      defaultProfitMargin: margin
+    });
+  };
+
+  const saveSettings = async (newSettings: CompanySettings) => {
+    const payload = {
+      ...newSettings,
+      updatedAt: new Date().toISOString()
+    };
+    try {
+      await setDoc(doc(db, 'settings', 'store_config'), payload);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'settings/store_config');
+    }
+    setSettings(payload);
+  };
+
+  // Helper to detect category icon emoji
+  const detectCategoryEmoji = (name: string): string => {
+    const low = name.toLowerCase();
+    if (low.includes('tecno') || low.includes('gadget') || low.includes('smart') || low.includes('celular') || low.includes('movil') || low.includes('reloj')) return '📱';
+    if (low.includes('audio') || low.includes('auricular') || low.includes('sonido') || low.includes('parlante') || low.includes('headphone')) return '🎧';
+    if (low.includes('herramienta') || low.includes('ferreteria') || low.includes('taller') || low.includes('mecanic') || low.includes('extractor') || low.includes('llave') || low.includes('pinza')) return '🔧';
+    if (low.includes('hogar') || low.includes('casa') || low.includes('luz') || low.includes('lamp') || low.includes('ilumin') || low.includes('velador') || low.includes('foco')) return '💡';
+    if (low.includes('bazar') || low.includes('cocina') || low.includes('cuchill') || low.includes('termo') || low.includes('vaso') || low.includes('comida') || low.includes('afilador')) return '🍳';
+    if (low.includes('moda') || low.includes('ropa') || low.includes('mochila') || low.includes('bolso') || low.includes('accesorio') || low.includes('valija')) return '🎒';
+    if (low.includes('belleza') || low.includes('cuidado') || low.includes('barber') || low.includes('pelo') || low.includes('facial') || low.includes('afeitad')) return '💄';
+    if (low.includes('auto') || low.includes('vehicul') || low.includes('moto') || low.includes('car')) return '🚗';
+    if (low.includes('juguete') || low.includes('bebe') || low.includes('nino') || low.includes('gamer') || low.includes('game')) return '🎮';
+    if (low.includes('deporte') || low.includes('fitness') || low.includes('gym') || low.includes('entren')) return '⚽';
+    if (low.includes('oferta') || low.includes('super') || low.includes('liquidac') || low.includes('descuento')) return '🔥';
+    return '📦';
+  };
+
+  // Computed categories from settings + dynamic discovery
+  const categories: StoreCategory[] = React.useMemo(() => {
+    const baseList = (settings.categories && settings.categories.length > 0)
+      ? settings.categories
+      : DEFAULT_CATEGORIES;
+    const knownNames = new Set(baseList.map((c) => c.name.toLowerCase().trim()));
+    const autoDiscovered: StoreCategory[] = [];
+    for (const p of products) {
+      const catName = p.category?.trim();
+      if (catName && !knownNames.has(catName.toLowerCase()) && catName !== 'Todos') {
+        knownNames.add(catName.toLowerCase());
+        autoDiscovered.push({
+          id: `cat-auto-${catName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          name: catName,
+          icon: detectCategoryEmoji(catName),
+          description: `Categoría detectada automáticamente de productos`,
+          isCustom: true
+        });
+      }
+    }
+    return [...baseList, ...autoDiscovered];
+  }, [settings.categories, products]);
+
+  // Computed active banners
+  const banners: HeroBannerItem[] = React.useMemo(() => {
+    return (settings.banners && settings.banners.length > 0)
+      ? settings.banners
+      : DEFAULT_BANNERS;
+  }, [settings.banners]);
+
+  const saveBanners = async (newBanners: HeroBannerItem[]) => {
+    const updated = {
+      ...settings,
+      banners: newBanners
+    };
+    await saveSettings(updated);
+  };
+
+  const addCategory = async (catData: Omit<StoreCategory, 'id'>) => {
+    const cleanName = catData.name.trim();
+    const newId = `cat-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const newCat: StoreCategory = {
+      id: newId,
+      name: cleanName,
+      icon: catData.icon || detectCategoryEmoji(cleanName),
+      description: catData.description || '',
+      imageUrl: catData.imageUrl,
+      isCustom: true
+    };
+    const currentList = settings.categories && settings.categories.length > 0 ? settings.categories : DEFAULT_CATEGORIES;
+    const updated = [...currentList, newCat];
+    await saveSettings({
+      ...settings,
+      categories: updated
+    });
+    return newId;
+  };
+
+  const updateCategory = async (id: string, updates: Partial<StoreCategory>) => {
+    const currentList = settings.categories && settings.categories.length > 0 ? settings.categories : DEFAULT_CATEGORIES;
+    const oldCat = currentList.find((c) => c.id === id);
+    const updatedList = currentList.map((c) => (c.id === id ? { ...c, ...updates } : c));
+    await saveSettings({
+      ...settings,
+      categories: updatedList
+    });
+    // If category name changed, synchronize it on existing products
+    if (updates.name && oldCat && updates.name !== oldCat.name) {
+      for (const p of products) {
+        if (p.category === oldCat.name) {
+          await updateProduct(p.id, { category: updates.name.trim() });
+        }
+      }
+    }
+  };
+
+  const deleteCategory = async (id: string) => {
+    const currentList = settings.categories && settings.categories.length > 0 ? settings.categories : DEFAULT_CATEGORIES;
+    const updatedList = currentList.filter((c) => c.id !== id);
+    await saveSettings({
+      ...settings,
+      categories: updatedList
+    });
+  };
+
+  const ensureCategoryExists = async (categoryName: string, icon?: string): Promise<string> => {
+    if (!categoryName || !categoryName.trim()) return 'General';
+    const cleanName = categoryName.trim();
+    const currentList = settings.categories && settings.categories.length > 0 ? settings.categories : DEFAULT_CATEGORIES;
+    const existing = currentList.find((c) => c.name.toLowerCase() === cleanName.toLowerCase());
+    if (existing) {
+      return existing.name;
+    }
+    const newCat: StoreCategory = {
+      id: `cat-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: cleanName,
+      icon: icon || detectCategoryEmoji(cleanName),
+      description: `Categoría importada automáticamente de enlace o proveedor`,
+      isCustom: true
+    };
+    const updatedList = [...currentList, newCat];
+    await saveSettings({
+      ...settings,
+      categories: updatedList
+    });
+    return cleanName;
+  };
+
+
+  const createOrder = async (orderData: Omit<Order, 'id' | 'createdAt'>): Promise<string> => {
+    const orderId = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+    const fullOrder: Order = {
+      ...orderData,
+      id: orderId,
+      orderStatus: 'presupuesto_pendiente',
+      budgetStatus: 'stock_verification_pending',
+      paymentStatus: 'pending',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, 'orders', orderId), fullOrder);
+      // Decrement stock in real time
+      for (const item of orderData.items) {
+        const prod = products.find((p) => p.id === item.productId);
+        if (prod && prod.stock > 0) {
+          const newStock = Math.max(0, prod.stock - item.quantity);
+          await updateStock(prod.id, newStock);
+        }
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `orders/${orderId}`);
+    }
+
+    // Automatically register or update buyer in Clientes (CRM)
+    try {
+      const clientEmail = (orderData.customerEmail || '').trim().toLowerCase();
+      const clientPhone = (orderData.customerPhone || '').trim();
+      const clientName = (orderData.customerName || '').trim();
+
+      if (clientName || clientEmail || clientPhone) {
+        const existingClient = clients.find(
+          (c) =>
+            (clientEmail && c.email.toLowerCase() === clientEmail) ||
+            (clientPhone && c.phone === clientPhone)
+        );
+
+        if (existingClient) {
+          const updatedClient: CustomerClient = {
+            ...existingClient,
+            name: clientName || existingClient.name,
+            phone: clientPhone || existingClient.phone,
+            email: clientEmail || existingClient.email,
+            address: orderData.customerAddress || existingClient.address,
+            city: orderData.customerCity || existingClient.city,
+            dniCuit: orderData.customerDniCuit || existingClient.dniCuit,
+            totalOrders: (existingClient.totalOrders || 0) + 1,
+            totalSpent: (existingClient.totalSpent || 0) + (orderData.totalAmount || 0),
+            lastOrderId: orderId,
+            lastOrderDate: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'clients', existingClient.id), updatedClient);
+          setClients((prev) => prev.map((c) => (c.id === existingClient.id ? updatedClient : c)));
+        } else {
+          const newClientId = `cli-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+          const newClient: CustomerClient = {
+            id: newClientId,
+            name: clientName || 'Cliente Web',
+            email: clientEmail || '',
+            phone: clientPhone || '',
+            address: orderData.customerAddress || '',
+            city: orderData.customerCity || '',
+            dniCuit: orderData.customerDniCuit || '',
+            notes: orderData.budgetNotes || '',
+            totalOrders: 1,
+            totalSpent: orderData.totalAmount || 0,
+            lastOrderId: orderId,
+            lastOrderDate: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          await setDoc(doc(db, 'clients', newClientId), newClient);
+          setClients((prev) => [newClient, ...prev]);
+        }
+      }
+    } catch (clientErr: any) {
+      console.warn('Could not auto-register client in Firestore:', clientErr.message);
+    }
+
+    setOrders((prev) => [fullOrder, ...prev]);
+    clearCart();
+
+    // Auto-generate supplier purchase orders draft for easy one-click ordering
+    try {
+      createSupplierOrdersFromCustomerOrder(fullOrder).catch((err) => {
+        console.warn('Auto-create supplier orders notice:', err.message);
+      });
+    } catch {}
+
+    return orderId;
+  };
+
+  const addClient = async (
+    clientData: Omit<CustomerClient, 'id' | 'createdAt' | 'totalOrders' | 'totalSpent'>
+  ): Promise<string> => {
+    const newId = `cli-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    const fullClient: CustomerClient = {
+      ...clientData,
+      id: newId,
+      totalOrders: 0,
+      totalSpent: 0,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(doc(db, 'clients', newId), fullClient);
+    setClients((prev) => [fullClient, ...prev]);
+    return newId;
+  };
+
+  const updateClient = async (id: string, updates: Partial<CustomerClient>) => {
+    const updated = { ...updates, updatedAt: new Date().toISOString() };
+    await updateDoc(doc(db, 'clients', id), updated);
+    setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...updated } : c)));
+  };
+
+  const deleteClient = async (id: string) => {
+    await deleteDoc(doc(db, 'clients', id));
+    setClients((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const createSupplierOrder = async (
+    orderData: Omit<SupplierPurchaseOrder, 'id' | 'createdAt'>
+  ): Promise<string> => {
+    const ocId = `OC-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+    const full: SupplierPurchaseOrder = {
+      ...orderData,
+      id: ocId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    await setDoc(doc(db, 'supplier_orders', ocId), full);
+    setSupplierOrders((prev) => [full, ...prev]);
+    return ocId;
+  };
+
+  const createSupplierOrdersFromCustomerOrder = async (
+    customerOrder: Order
+  ): Promise<SupplierPurchaseOrder[]> => {
+    // Group order items by supplier
+    const supplierGroups: { [supplierName: string]: SupplierOrderItem[] } = {};
+
+    for (const item of customerOrder.items) {
+      const prod = products.find((p) => p.id === item.productId);
+      const supplierName = (
+        prod?.supplierName ||
+        (prod?.supplierUrl?.toLowerCase().includes('plutotec') ? 'Plutotec' : '') ||
+        (prod?.supplierUrl?.toLowerCase().includes('inova') ? 'Inova ARG' : '') ||
+        'Inova ARG'
+      ).trim();
+
+      const unitCost = prod?.originalPrice || Math.round(item.price * 0.7);
+      const unitCostUsd =
+        prod?.costInUsd ||
+        (prod?.costCurrency === 'USD'
+          ? Math.round(unitCost / (settings.usdExchangeRate || 1555))
+          : undefined);
+      const supplierUrl = prod?.supplierUrl || '';
+      const supplierSku = prod?.supplierSku || '';
+      const imageUrl = prod?.imageUrl || item.imageUrl || '';
+
+      const supItem: SupplierOrderItem = {
+        productId: item.productId,
+        title: item.title,
+        quantity: item.quantity,
+        unitCost,
+        costCurrency: prod?.costCurrency || 'ARS',
+        unitCostUsd,
+        totalCost: unitCost * item.quantity,
+        customerSalePrice: item.price,
+        totalSalePrice: item.price * item.quantity,
+        supplierUrl,
+        supplierSku,
+        imageUrl
+      };
+
+      if (!supplierGroups[supplierName]) {
+        supplierGroups[supplierName] = [];
+      }
+      supplierGroups[supplierName].push(supItem);
+    }
+
+    const createdList: SupplierPurchaseOrder[] = [];
+    const suppliers = Object.keys(supplierGroups);
+
+    for (let i = 0; i < suppliers.length; i++) {
+      const supName = suppliers[i];
+      const supItems = supplierGroups[supName];
+      const totalCostToPay = supItems.reduce((acc, it) => acc + it.totalCost, 0);
+      const customerSaleTotal = supItems.reduce((acc, it) => acc + it.totalSalePrice, 0);
+      const estimatedProfit = customerSaleTotal - totalCostToPay;
+      const totalCostUsd = supItems.some((it) => it.unitCostUsd)
+        ? supItems.reduce((acc, it) => acc + (it.unitCostUsd || 0) * it.quantity, 0)
+        : undefined;
+
+      const randomSuffix = Math.floor(100 + Math.random() * 900);
+      const ocId = `OC-${Date.now().toString().slice(-6)}-${i + 1}`;
+      const orderNumber = `OC #${Date.now().toString().slice(-4)}${randomSuffix}`;
+
+      let supplierPhone = '';
+      if (supName.toLowerCase().includes('inova')) supplierPhone = '+5491123456789';
+      else if (supName.toLowerCase().includes('plutotec')) supplierPhone = '+5491198765432';
+
+      const newOrder: SupplierPurchaseOrder = {
+        id: ocId,
+        orderNumber,
+        customerOrderId: customerOrder.id,
+        customerName: customerOrder.customerName,
+        customerPhone: customerOrder.customerPhone,
+        supplierName: supName,
+        supplierPhone,
+        items: supItems,
+        totalCostToPay,
+        totalCostUsd,
+        customerSaleTotal,
+        estimatedProfit,
+        status: 'pendiente_encargar',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      try {
+        await setDoc(doc(db, 'supplier_orders', ocId), newOrder);
+      } catch (err: any) {
+        console.warn('Could not save supplier order in Firestore:', err.message);
+      }
+
+      createdList.push(newOrder);
+    }
+
+    setSupplierOrders((prev) => [...createdList, ...prev]);
+    return createdList;
+  };
+
+  const updateSupplierOrderStatus = async (
+    orderId: string,
+    status: SupplierPurchaseOrder['status'],
+    notes?: string
+  ) => {
+    const updates: Partial<SupplierPurchaseOrder> = {
+      status,
+      updatedAt: new Date().toISOString()
+    };
+    if (notes !== undefined) updates.notes = notes;
+    if (status === 'encargado_pagado') updates.paidAt = new Date().toISOString();
+    if (status === 'recibido_deposito') updates.receivedAt = new Date().toISOString();
+
+    try {
+      await updateDoc(doc(db, 'supplier_orders', orderId), updates);
+    } catch (err: any) {
+      console.warn('Could not update supplier order in Firestore:', err.message);
+    }
+
+    setSupplierOrders((prev) =>
+      prev.map((so) => (so.id === orderId ? { ...so, ...updates } : so))
+    );
+  };
+
+  const deleteSupplierOrder = async (orderId: string) => {
+    try {
+      await deleteDoc(doc(db, 'supplier_orders', orderId));
+    } catch (err: any) {
+      console.warn('Could not delete supplier order in Firestore:', err.message);
+    }
+    setSupplierOrders((prev) => prev.filter((so) => so.id !== orderId));
+  };
+
+  const generateMercadoPagoLink = async (order: Order) => {
+    try {
+      const res = await fetch('/api/mercadopago/create-preference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          items: order.items,
+          customerEmail: order.customerEmail,
+          customerName: order.customerName,
+          totalAmount: order.adjustedTotal || order.totalAmount,
+          accessToken: settings.mercadoPagoAccessToken
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        return {
+          initPoint: data.initPoint,
+          deepLink: data.deepLink,
+          preferenceId: data.preferenceId
+        };
+      }
+      throw new Error(data.error || 'No se pudo generar preferencia MP');
+    } catch (err: any) {
+      console.warn('Error generating Mercado Pago link, using fallback:', err.message);
+      const simPref = `PREF-${Date.now()}-${order.id}`;
+      return {
+        initPoint: `https://www.mercadopago.com.ar/checkout/v1/payment/redirect/?preference-id=${simPref}`,
+        deepLink: `mercadopago://checkout?pref_id=${simPref}`,
+        preferenceId: simPref
+      };
+    }
+  };
+
+  const verifyAndSendBudget = async (
+    orderId: string,
+    updatedItems: any[],
+    notes: string,
+    adjustedTotal: number
+  ): Promise<string> => {
+    const existingOrder = orders.find((o) => o.id === orderId);
+    let mpLink = '';
+
+    if (existingOrder) {
+      const orderForMp = {
+        ...existingOrder,
+        items: updatedItems,
+        adjustedTotal
+      };
+      const mpData = await generateMercadoPagoLink(orderForMp);
+      mpLink = mpData.initPoint;
+
+      const updates: Partial<Order> = {
+        items: updatedItems,
+        adjustedTotal,
+        budgetNotes: notes,
+        budgetStatus: 'budget_ready',
+        orderStatus: 'presupuesto_enviado',
+        mercadoPagoPaymentLink: mpLink,
+        mercadoPagoPreferenceId: mpData.preferenceId,
+        verifiedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      try {
+        await updateDoc(doc(db, 'orders', orderId), updates);
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
+      }
+
+      setOrders((prev) =>
+        prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o))
+      );
+    }
+    return mpLink;
+  };
+
+  const markOrderAsPaid = async (orderId: string, method: string, proofUrl?: string) => {
+    const updates: Partial<Order> = {
+      paymentStatus: 'paid',
+      orderStatus: 'en_preparacion',
+      budgetStatus: 'order_confirmed',
+      paymentMethod: method as any,
+      paymentProofUrl: proofUrl || '',
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      await updateDoc(doc(db, 'orders', orderId), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
+    }
+
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, ...updates } : o))
+    );
+  };
+
+  const updateOrderStatus = async (orderId: string, status: Order['orderStatus']) => {
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        orderStatus: status,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
+    }
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, orderStatus: status } : o))
+    );
+  };
+
+  const updatePaymentStatus = async (orderId: string, status: Order['paymentStatus']) => {
+    try {
+      await updateDoc(doc(db, 'orders', orderId), {
+        paymentStatus: status,
+        updatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `orders/${orderId}`);
+    }
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, paymentStatus: status } : o))
+    );
+  };
+
+  const syncProductCostFromLink = async (productId: string, customUrl?: string) => {
+    const prod = products.find((p) => p.id === productId);
+    const targetUrl = customUrl || prod?.supplierUrl;
+    if (!targetUrl || !targetUrl.trim().startsWith('http')) {
+      throw new Error('El producto no tiene un enlace de proveedor asignado.');
+    }
+
+    const res = await fetch('/api/sync-product-cost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: targetUrl.trim(),
+        markupPercentage: prod?.markupPercentage || settings.defaultProfitMargin || 40,
+        currentOriginalPrice: prod?.originalPrice || 0
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'No se pudo leer el costo desde el enlace.');
+    }
+
+    const updates: Partial<Product> = {
+      originalPrice: data.originalPrice,
+      finalPrice: data.finalPrice,
+      supplierUrl: targetUrl.trim(),
+      lastCostSyncAt: data.syncedAt || new Date().toISOString()
+    };
+    if (data.supplierName) updates.supplierName = data.supplierName;
+    if (typeof data.inStock === 'boolean') updates.inStock = data.inStock;
+
+    await updateProduct(productId, updates);
+
+    return {
+      success: true,
+      oldCost: data.oldCost,
+      newCost: data.originalPrice,
+      newFinalPrice: data.finalPrice,
+      priceChanged: Boolean(data.priceChanged),
+      diff: Number(data.diff) || 0,
+      supplierName: data.supplierName,
+      message: data.priceChanged
+        ? `Costo actualizado de $${data.oldCost?.toLocaleString('es-AR')} a $${data.originalPrice?.toLocaleString('es-AR')}`
+        : `Costo sin cambios ($${data.originalPrice?.toLocaleString('es-AR')})`
+    };
+  };
+
+  const syncAllProductCostsFromLinks = async () => {
+    const linkedProducts = products.filter(
+      (p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http')
+    );
+
+    if (linkedProducts.length === 0) {
+      return { total: 0, updated: 0, unchanged: 0, failed: 0, results: [] };
+    }
+
+    const res = await fetch('/api/sync-multiple-costs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        products: linkedProducts.map((p) => ({
+          id: p.id,
+          title: p.title,
+          supplierUrl: p.supplierUrl,
+          markupPercentage: p.markupPercentage || settings.defaultProfitMargin || 40,
+          originalPrice: p.originalPrice,
+          finalPrice: p.finalPrice
+        }))
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      throw new Error(data.error || 'Error al sincronizar costos masivos');
+    }
+
+    // Apply updates to products in state and Firestore
+    const updatedResults = data.results || [];
+    for (const r of updatedResults) {
+      if (r.success && r.newCost > 0) {
+        await updateProduct(r.id, {
+          originalPrice: r.newCost,
+          finalPrice: r.newFinalPrice,
+          lastCostSyncAt: data.syncedAt || new Date().toISOString()
+        });
+      }
+    }
+
+    return {
+      total: data.total || linkedProducts.length,
+      updated: data.updated || 0,
+      unchanged: data.unchanged || 0,
+      failed: data.failed || 0,
+      results: updatedResults
+    };
   };
 
   return (
     <StoreContext.Provider
       value={{
         products,
+        orders,
+        clients,
+        supplierOrders,
+        settings,
+        cart,
+        cartCount,
+        cartTotal,
+        isCartOpen,
+        isCheckoutOpen,
+        selectedProduct,
+        activeCategory,
+        searchQuery,
+        isLoading,
+        setIsCartOpen,
+        setIsCheckoutOpen,
+        setSelectedProduct,
+        setActiveCategory,
+        setSearchQuery,
+        addToCart,
+        removeFromCart,
+        updateCartQuantity,
+        clearCart,
         addProduct,
+        addMultipleProducts,
         updateProduct,
         deleteProduct,
-        batchUpdatePrices,
-        resetCatalogToDefault,
-        cart,
-        addToCart,
-        updateCartQuantity,
-        removeFromCart,
-        clearCart,
-        cartTotal,
-        cartItemCount,
-        isMinimumReached,
-        minimumRemaining,
-        deals,
-        addDeal,
-        updateDealStage,
-        updateDeal,
-        deleteDeal,
-        clients,
-        addClient,
-        orders,
-        placeOrder,
+        deleteMultipleProducts,
+        updateStock,
+        updateGlobalMarkup,
+        saveSettings,
+        categories,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        ensureCategoryExists,
+        banners,
+        saveBanners,
+        isBudgetTrackingOpen,
+        trackingOrderId,
+        setIsBudgetTrackingOpen,
+        setTrackingOrderId,
+        isSuperOfertasOpen,
+        setIsSuperOfertasOpen,
+        createOrder,
+        verifyAndSendBudget,
+        generateMercadoPagoLink,
+        markOrderAsPaid,
         updateOrderStatus,
-        interactions,
-        addInteraction,
-        companySettings,
-        updateCompanySettings,
-        isCrmAuthenticated,
-        crmUser,
-        loginCrm,
-        logoutCrm,
-        activeTab,
-        setActiveTab,
-        selectedProductForModal,
-        setSelectedProductForModal,
-        productToEdit,
-        setProductToEdit,
-        isProductEditModalOpen,
-        setIsProductEditModalOpen,
-        openCreateProductModal,
-        openEditProductModal,
-        closeProductEditModal,
-        isCartOpen,
-        setIsCartOpen,
-        isCheckoutOpen,
-        setIsCheckoutOpen,
-        isFirebaseConnected,
-        // Notifications & Realtime Alerts
-        notifications,
-        unreadNotificationsCount,
-        urgentNotificationsCount,
-        addNotification,
-        markNotificationAsRead,
-        markAllNotificationsAsRead,
-        deleteNotification,
-        clearAllNotifications,
-        activeToastNotification,
-        dismissToast,
-        isSoundEnabled,
-        toggleSound,
-        simulateIncomingOrder,
-        simulateUrgentInteraction,
-        selectedEntityForFocus,
-        setSelectedEntityForFocus,
-        // Dynamic Categories
-        catalogCategories,
-        addCustomCategory,
-        // Suppliers & Dropshipping Sync
-        supplierSources,
-        supplierProducts,
-        addSupplierSource,
-        updateSupplierSource,
-        deleteSupplierSource,
-        addSupplierProduct,
-        updateSupplierProduct,
-        deleteSupplierProduct,
-        publishSupplierProductToStore,
-        unpublishSupplierProductFromStore,
-        batchPublishSupplierProducts,
-        batchImportSupplierProducts,
-        batchApplyMarkup,
-        batchSyncSupplierProducts,
-        extractProductsFromUrl
+        updatePaymentStatus,
+        resetToInitialCatalog,
+        addClient,
+        updateClient,
+        deleteClient,
+        createSupplierOrder,
+        createSupplierOrdersFromCustomerOrder,
+        updateSupplierOrderStatus,
+        deleteSupplierOrder,
+        syncProductCostFromLink,
+        syncAllProductCostsFromLinks
       }}
     >
       {children}

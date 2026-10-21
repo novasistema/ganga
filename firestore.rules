@@ -1,57 +1,40 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
     }
 
-    match /products/{productId} {
-      allow read: if true;
-      allow write: if isValidId(productId);
-    }
-
-    match /orders/{orderId} {
-      allow read, create: if true;
-      allow update, delete: if isValidId(orderId);
-    }
-
-    match /deals/{dealId} {
-      allow read: if true;
-      allow write: if isValidId(dealId);
-    }
-
-    match /clients/{clientId} {
-      allow read: if true;
-      allow write: if isValidId(clientId);
-    }
-
-    match /interactions/{interactionId} {
-      allow read: if true;
-      allow write: if isValidId(interactionId);
-    }
-
-    match /notifications/{notificationId} {
-      allow read: if true;
-      allow write: if isValidId(notificationId);
-    }
-
-    match /settings/{settingId} {
-      allow read: if true;
-      allow write: if isValidId(settingId);
-    }
-
-    match /suppliers/{supplierId} {
-      allow read: if true;
-      allow write: if isValidId(supplierId);
-    }
-
-    match /supplier_products/{productId} {
-      allow read: if true;
-      allow write: if isValidId(productId);
-    }
-
+    // Connection testing doc
     match /test/{docId} {
+      allow read, write: if true;
+    }
+
+    // Products catalog (Dropshipping items)
+    match /products/{productId} {
+      allow read, write: if true;
+    }
+
+    // Customer orders & budgets
+    match /orders/{orderId} {
+      allow read, write: if true;
+    }
+
+    // Registered clients / buyers directory
+    match /clients/{clientId} {
+      allow read, write: if true;
+    }
+
+    // Supplier purchase orders (Órdenes de Compra a Proveedores)
+    match /supplier_orders/{orderId} {
+      allow read, write: if true;
+    }
+
+    // Store & payment settings
+    match /settings/{settingId} {
       allow read, write: if true;
     }
   }
