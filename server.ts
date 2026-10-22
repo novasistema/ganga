@@ -1154,6 +1154,7 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
         // D. Category / Catalog listing in Next.js RSC payload:
         // Match arrays of products: {"id":...,"name":"...","price":...,"image":"...","category":"..."}
         if (scrapedProducts.length === 0) {
+          const unescaped = html.replace(/\\+/g, '');
           const listRegex = /\{"id":(\d+),"name":"([^"]+)","price":([0-9.]+)(?:,"price_offer":([^,]*))?,"image":"([^"]+)"(?:,"images":\[([^\]]*)\])?,"category":"([^"]+)"(?:,"slug":"([^"]+)")?/g;
           let listMatch;
           let catProductCount = 0;
@@ -2162,7 +2163,7 @@ app.get('/api/inova-search', async (req: Request, res: Response) => {
 // API Endpoint to sync/update multiple products' costs from their supplier links in bulk
 app.post('/api/sync-multiple-costs', async (req: Request, res: Response) => {
   try {
-    const { products } = req.body;
+    const { products, usdExchangeRate = 1550 } = req.body;
 
     if (!Array.isArray(products) || products.length === 0) {
       return res.status(400).json({
@@ -2215,7 +2216,10 @@ app.post('/api/sync-multiple-costs', async (req: Request, res: Response) => {
         const extracted = await extractLiveCostFromUrl(item.supplierUrl.trim());
 
         if (extracted.cost > 0) {
-          const newCost = extracted.cost;
+          let newCost = extracted.cost;
+          if (item.costCurrency === 'USD') {
+            newCost = Math.round(extracted.cost * Number(usdExchangeRate || 1550));
+          }
           const newFinalPrice = Math.round(newCost * (1 + margin / 100));
           const priceChanged = oldCost > 0 ? oldCost !== newCost : false;
           const diff = oldCost > 0 ? newCost - oldCost : 0;

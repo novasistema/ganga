@@ -21,11 +21,15 @@ import {
   ArrowDown,
   Layers,
   Image as ImageIcon,
-  Palette
+  Palette,
+  Star,
+  Search,
+  X
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
-import { HeroBannerItem, HeroBannerFeature } from '../types';
+import { HeroBannerItem, HeroBannerFeature, Product } from '../types';
 import confetti from 'canvas-confetti';
+import { resolveImageUrl, DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
 const GRADIENT_PRESETS = [
   {
@@ -80,11 +84,13 @@ const FEATURE_ICONS: { id: HeroBannerFeature['icon']; label: string }[] = [
 ];
 
 export const BannerManager: React.FC = () => {
-  const { banners, saveBanners, categories } = useStore();
+  const { banners, saveBanners, categories, products } = useStore();
 
   const [editingBanner, setEditingBanner] = useState<HeroBannerItem | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [activePreviewTab, setActivePreviewTab] = useState<'editor' | 'preview'>('editor');
+  const [productSearch, setProductSearch] = useState('');
+  const [productCatFilter, setProductCatFilter] = useState('Todas');
 
   const showNotification = (type: 'success' | 'error', message: string) => {
     setNotification({ type, message });
@@ -154,6 +160,7 @@ export const BannerManager: React.FC = () => {
       secondaryButtonCategory: 'Todos',
       backgroundGradient: 'from-slate-900 via-indigo-950 to-slate-900',
       active: true,
+      featuredProductIds: products.slice(0, 2).map((p) => p.id), // Precargar con los primeros 2 de catálogo
       features: [
         { id: 'f1', icon: 'truck', title: 'Despacho Rápido', description: 'Envíos asegurados directo a domicilio.' },
         { id: 'f2', icon: 'credit-card', title: 'Hasta 3 Cuotas', description: 'Facilidades de pago y transferencia.' },
@@ -274,6 +281,13 @@ export const BannerManager: React.FC = () => {
                     {banner.showCountdown && (
                       <span className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md font-mono border border-amber-500/20">
                         ⏱️ Cronómetro ({banner.countdownHours || 8}h)
+                      </span>
+                    )}
+
+                    {banner.featuredProductIds && banner.featuredProductIds.length > 0 && (
+                      <span className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md font-bold border border-amber-500/30 flex items-center gap-1">
+                        <span>⭐</span>
+                        <span>{banner.featuredProductIds.length} {banner.featuredProductIds.length === 1 ? 'destacado' : 'destacados'}</span>
                       </span>
                     )}
                   </div>
@@ -726,6 +740,255 @@ export const BannerManager: React.FC = () => {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+
+                {/* 7. Featured Products Attached to this Banner */}
+                <div className="bg-slate-950 p-4 sm:p-5 rounded-2xl border border-amber-500/30 space-y-4 shadow-lg shadow-amber-950/20">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Star className="w-4 h-4 text-amber-400 fill-amber-400 animate-pulse" />
+                        <span className="text-xs font-black text-amber-300 uppercase tracking-wider">
+                          7. Artículos Destacados Vinculados a este Banner
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Selecciona productos del inventario para exhibirlos como destacados en la portada con foto, precio en pesos y compra rápida.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-1 rounded-full bg-amber-400/10 text-amber-300 border border-amber-400/30 text-xs font-bold">
+                        {editingBanner.featuredProductIds?.length || 0} seleccionados
+                      </span>
+                      {(editingBanner.featuredProductIds?.length || 0) > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingBanner({ ...editingBanner, featuredProductIds: [] })}
+                          className="text-[10px] text-rose-400 hover:text-rose-300 underline cursor-pointer"
+                        >
+                          Limpiar todos
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Selected Products Preview Cards */}
+                  {editingBanner.featuredProductIds && editingBanner.featuredProductIds.length > 0 ? (
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Orden de visualización en el banner (los primeros se muestran destacados):
+                      </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                        {editingBanner.featuredProductIds.map((prodId, pIdx) => {
+                          const prod = products.find((p) => p.id === prodId);
+                          if (!prod) return null;
+                          return (
+                            <div
+                              key={prod.id}
+                              className="flex items-center justify-between p-2.5 bg-slate-900 border border-amber-500/40 rounded-xl gap-2 shadow-xs"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="w-5 h-5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-black flex items-center justify-center shrink-0 border border-amber-400/40">
+                                  #{pIdx + 1}
+                                </span>
+                                <img
+                                  src={resolveImageUrl(prod.imageUrl)}
+                                  alt={prod.title}
+                                  referrerPolicy="no-referrer"
+                                  className="w-10 h-10 object-cover rounded-lg bg-slate-800 shrink-0 border border-slate-700"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = DEFAULT_PRODUCT_PLACEHOLDER;
+                                  }}
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-white truncate max-w-[130px]" title={prod.title}>
+                                    {prod.title}
+                                  </p>
+                                  <p className="text-[11px] font-mono text-emerald-400 font-bold">
+                                    $ {prod.finalPrice.toLocaleString('es-AR')}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const list = [...(editingBanner.featuredProductIds || [])];
+                                    if (pIdx > 0) {
+                                      const tmp = list[pIdx];
+                                      list[pIdx] = list[pIdx - 1];
+                                      list[pIdx - 1] = tmp;
+                                      setEditingBanner({ ...editingBanner, featuredProductIds: list });
+                                    }
+                                  }}
+                                  disabled={pIdx === 0}
+                                  title="Mover a la izquierda"
+                                  className="p-1 text-slate-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                                >
+                                  <ArrowUp className="w-3 h-3 sm:hidden" />
+                                  <ArrowRight className="w-3 h-3 hidden sm:block rotate-180" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const list = [...(editingBanner.featuredProductIds || [])];
+                                    if (pIdx < list.length - 1) {
+                                      const tmp = list[pIdx];
+                                      list[pIdx] = list[pIdx + 1];
+                                      list[pIdx + 1] = tmp;
+                                      setEditingBanner({ ...editingBanner, featuredProductIds: list });
+                                    }
+                                  }}
+                                  disabled={pIdx === ((editingBanner.featuredProductIds?.length || 0) - 1)}
+                                  title="Mover a la derecha"
+                                  className="p-1 text-slate-400 hover:text-white disabled:opacity-20 cursor-pointer"
+                                >
+                                  <ArrowDown className="w-3 h-3 sm:hidden" />
+                                  <ArrowRight className="w-3 h-3 hidden sm:block" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const list = (editingBanner.featuredProductIds || []).filter((id) => id !== prod.id);
+                                    setEditingBanner({ ...editingBanner, featuredProductIds: list });
+                                  }}
+                                  title="Quitar de destacados"
+                                  className="p-1 text-rose-400 hover:text-rose-200 hover:bg-rose-950/50 rounded cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-slate-900/50 rounded-xl border border-dashed border-slate-800 text-center text-xs text-slate-500">
+                      Ningún producto seleccionado. Haz clic en "+ Agregar" en los productos abajo.
+                    </div>
+                  )}
+
+                  {/* Search and Category Filter for Available Products */}
+                  <div className="space-y-2 pt-2">
+                    <div className="flex flex-col sm:flex-row items-center gap-2">
+                      <div className="relative flex-1 w-full">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                        <input
+                          type="text"
+                          value={productSearch}
+                          onChange={(e) => setProductSearch(e.target.value)}
+                          placeholder="Buscar producto por nombre..."
+                          className="w-full pl-8 pr-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500"
+                        />
+                      </div>
+
+                      <select
+                        value={productCatFilter}
+                        onChange={(e) => setProductCatFilter(e.target.value)}
+                        className="w-full sm:w-48 px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-slate-200 cursor-pointer"
+                      >
+                        <option value="Todas">Todas las categorías</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.icon || '🏷️'} {c.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const top4 = products.slice(0, 4).map((p) => p.id);
+                          setEditingBanner({ ...editingBanner, featuredProductIds: top4 });
+                        }}
+                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs font-bold rounded-xl whitespace-nowrap cursor-pointer transition-colors"
+                      >
+                        ⚡ Top 4 Productos
+                      </button>
+                    </div>
+
+                    {/* Products Grid to Choose From */}
+                    <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 rounded-xl border border-slate-800/80 p-2 bg-slate-900/30">
+                      {products
+                        .filter((p) => {
+                          const matchesQuery = !productSearch || p.title.toLowerCase().includes(productSearch.toLowerCase());
+                          const matchesCat = productCatFilter === 'Todas' || p.category.toLowerCase() === productCatFilter.toLowerCase();
+                          return matchesQuery && matchesCat;
+                        })
+                        .map((prod) => {
+                          const isFeatured = (editingBanner.featuredProductIds || []).includes(prod.id);
+                          return (
+                            <div
+                              key={prod.id}
+                              onClick={() => {
+                                const current = editingBanner.featuredProductIds || [];
+                                const updated = isFeatured
+                                  ? current.filter((id) => id !== prod.id)
+                                  : [...current, prod.id];
+                                setEditingBanner({ ...editingBanner, featuredProductIds: updated });
+                              }}
+                              className={`flex items-center justify-between p-2 rounded-xl border transition-all cursor-pointer ${
+                                isFeatured
+                                  ? 'bg-amber-500/15 border-amber-500/60 shadow-xs'
+                                  : 'bg-slate-900/80 border-slate-800 hover:bg-slate-850 hover:border-slate-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isFeatured}
+                                  onChange={() => {}} // handled by parent onClick
+                                  className="w-4 h-4 rounded text-amber-500 bg-slate-950 border-slate-700 cursor-pointer"
+                                />
+                                <img
+                                  src={resolveImageUrl(prod.imageUrl)}
+                                  alt={prod.title}
+                                  referrerPolicy="no-referrer"
+                                  className="w-9 h-9 object-cover rounded-lg bg-slate-800 shrink-0 border border-slate-700"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = DEFAULT_PRODUCT_PLACEHOLDER;
+                                  }}
+                                />
+                                <div className="min-w-0">
+                                  <p className="text-xs font-bold text-white truncate max-w-sm">
+                                    {prod.title}
+                                  </p>
+                                  <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                                    <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">
+                                      {prod.category}
+                                    </span>
+                                    <span>Stock: {prod.stock}</span>
+                                    {prod.supplierName && (
+                                      <span className="text-indigo-400 truncate max-w-[100px]">
+                                        📦 {prod.supplierName}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="font-mono text-emerald-400 font-bold text-xs">
+                                  $ {prod.finalPrice.toLocaleString('es-AR')}
+                                </span>
+                                <span
+                                  className={`px-2 py-1 rounded-lg text-[10px] font-black transition-colors ${
+                                    isFeatured
+                                      ? 'bg-amber-400 text-slate-950 shadow-xs'
+                                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                                  }`}
+                                >
+                                  {isFeatured ? '✓ Destacado' : '+ Agregar'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
                   </div>
                 </div>
               </div>

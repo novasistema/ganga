@@ -206,6 +206,7 @@ export interface HeroBannerItem {
   backgroundGradient?: string;
   imageUrl?: string;
   features?: HeroBannerFeature[];
+  featuredProductIds?: string[]; // IDs de productos del inventario vinculados como destacados
   active: boolean;
   sortOrder?: number;
 }
@@ -233,6 +234,9 @@ export interface CompanySettings {
   dollarRateType?: 'blue' | 'oficial' | 'manual';
   lastDollarSyncAt?: string;
   autoPesifyWithUsd?: boolean;
+  autoSyncCostsEnabled?: boolean;     // Sincronización automática de costos periódica en segundo plano
+  autoSyncIntervalMinutes?: number;  // Intervalo en minutos para auto-sincronizar (ej: 30)
+  lastAutoCostSyncAt?: string;       // Timestamp del último auto-sync ejecutado
   currencySymbol: string;      // ej: "$"
   bankName: string;
   bankCbuAlias: string;

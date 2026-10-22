@@ -39,7 +39,8 @@ import {
   Image as ImageIcon,
   FolderTree,
   ChevronDown,
-  Users
+  Users,
+  Zap
 } from 'lucide-react';
 import { SuperOfertasModule } from './SuperOfertasModule';
 import { BannerManager } from './BannerManager';
@@ -77,6 +78,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     generateMercadoPagoLink,
     syncProductCostFromLink,
     syncAllProductCostsFromLinks,
+    syncUnsyncedProductsFromLinks,
     categories,
     ensureCategoryExists,
     banners
@@ -163,7 +165,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
   };
 
   // Cost Synchronization State
+  const [syncStatusFilter, setSyncStatusFilter] = useState<'all' | 'synced' | 'unsynced' | 'no_link'>('all');
   const [isSyncingAllCosts, setIsSyncingAllCosts] = useState(false);
+  const [isSyncingUnsynced, setIsSyncingUnsynced] = useState(false);
   const [syncingSingleId, setSyncingSingleId] = useState<string | null>(null);
   const [syncSummaryModal, setSyncSummaryModal] = useState<{
     total: number;
@@ -690,6 +694,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     }
   };
 
+  // Sincronizar únicamente los artículos que NO están sincronizados según su Enlace Dónde Comprar
+  const handleSyncUnsyncedOnly = async () => {
+    const unsyncedProducts = products.filter(
+      (p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http') && !p.lastCostSyncAt
+    );
+
+    if (unsyncedProducts.length === 0) {
+      setInventoryNotification({
+        type: 'success',
+        message: '¡Todos los productos con enlace de proveedor ya están sincronizados al día!'
+      });
+      setTimeout(() => setInventoryNotification(null), 4000);
+      return;
+    }
+
+    setIsSyncingUnsynced(true);
+    try {
+      const res = await syncUnsyncedProductsFromLinks();
+      setSyncSummaryModal(res);
+      confetti({ particleCount: 75, spread: 70, origin: { y: 0.5 } });
+      setInventoryNotification({
+        type: 'success',
+        message: `¡Sincronización de pendientes exitosa! Se sincronizaron ${res.total} artículo(s) según su Enlace Dónde Comprar (${res.updated} actualizados, ${res.unchanged} sin variación).`
+      });
+      setTimeout(() => setInventoryNotification(null), 6000);
+    } catch (err: any) {
+      setInventoryNotification({
+        type: 'error',
+        message: 'Error al sincronizar artículos pendientes: ' + err.message
+      });
+    } finally {
+      setIsSyncingUnsynced(false);
+    }
+  };
+
   // Sincronizar costo en vivo dentro del modal de edición
   const handleSyncCostInEditModal = async () => {
     let targetUrl = (editingProduct?.supplierUrl || '').trim();
@@ -713,7 +752,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
         body: JSON.stringify({
           url: targetUrl,
           markupPercentage: editingProduct?.markupPercentage || 40,
-          currentOriginalPrice: editingProduct?.originalPrice
+          currentOriginalPrice: editingProduct?.originalPrice,
+          costCurrency: editingProduct?.costCurrency || 'ARS',
+          usdExchangeRate: settings.usdExchangeRate || 1550
         })
       });
       const data = await res.json();
@@ -726,7 +767,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
           ? {
               ...prev,
               originalPrice: data.originalPrice || data.cost,
-              finalPrice: data.finalPrice,
+              costCurrency: data.costCurrency || prev.costCurrency || 'ARS',
+              costInUsd: data.costInUsd !== undefined ? data.costInUsd : prev.costInUsd,
+              finalPrice: data.finalPrice, // ALWAYS IN ARS!
               supplierName: data.supplierName || prev.supplierName
             }
           : null
@@ -770,7 +813,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
         body: JSON.stringify({
           url: targetUrl,
           markupPercentage: newProduct.markupPercentage || 40,
-          currentOriginalPrice: newProduct.originalPrice
+          currentOriginalPrice: newProduct.originalPrice,
+          costCurrency: newProduct.costCurrency || 'ARS',
+          usdExchangeRate: settings.usdExchangeRate || 1550
         })
       });
       const data = await res.json();
@@ -783,6 +828,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
         title: data.title || prev.title,
         description: data.description || prev.description,
         originalPrice: data.originalPrice || data.cost || prev.originalPrice,
+        costCurrency: data.costCurrency || prev.costCurrency || 'ARS',
+        costInUsd: data.costInUsd !== undefined ? data.costInUsd : prev.costInUsd,
         finalPrice: data.finalPrice || Math.round((data.originalPrice || data.cost || prev.originalPrice) * (1 + (newProduct.markupPercentage || 40) / 100)),
         supplierName: data.supplierName || prev.supplierName,
         category: data.category || prev.category,
@@ -1002,8 +1049,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.category.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCat = selectedCategory === 'Todas' || p.category === selectedCategory;
-    return matchesSearch && matchesCat;
+
+    let matchesSync = true;
+    const hasLink = Boolean(p.supplierUrl && p.supplierUrl.trim().startsWith('http'));
+    if (syncStatusFilter === 'synced') {
+      matchesSync = hasLink && Boolean(p.lastCostSyncAt);
+    } else if (syncStatusFilter === 'unsynced') {
+      matchesSync = hasLink && !p.lastCostSyncAt;
+    } else if (syncStatusFilter === 'no_link') {
+      matchesSync = !hasLink;
+    }
+
+    return matchesSearch && matchesCat && matchesSync;
   });
+
+  const syncedCount = products.filter((p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http') && p.lastCostSyncAt).length;
+  const unsyncedCount = products.filter((p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http') && !p.lastCostSyncAt).length;
+  const noLinkCount = products.filter((p) => !p.supplierUrl || !p.supplierUrl.trim().startsWith('http')).length;
 
   // Calculate CRM KPIs
   const totalSalesRevenue = orders.reduce((sum, o) => sum + (o.paymentStatus === 'paid' ? o.totalAmount : 0), 0);
@@ -1014,8 +1076,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
       {/* Top CRM Bar */}
-      <header className="bg-slate-950 border-b border-slate-800 px-4 sm:px-6 py-3.5 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      <header className="bg-slate-950 border-b border-slate-800 px-4 sm:px-8 xl:px-12 py-3.5 sticky top-0 z-30">
+        <div className="max-w-[1760px] w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-blue-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20">
               <Sparkles className="w-5 h-5 text-amber-300" />
@@ -1047,7 +1109,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
         </div>
 
         {/* Tab Navigation */}
-        <div className="max-w-7xl mx-auto flex items-center gap-1 sm:gap-2 mt-4 border-t border-slate-800/80 pt-2 overflow-x-auto no-scrollbar">
+        <div className="max-w-[1760px] w-full mx-auto flex items-center gap-1 sm:gap-2 mt-4 border-t border-slate-800/80 pt-2 overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('super_ofertas')}
             className={`px-3.5 py-2 rounded-xl text-xs font-black transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
@@ -1159,7 +1221,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       </header>
 
       {/* Main CRM Content */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+      <main className="flex-1 max-w-[1760px] w-full mx-auto px-4 sm:px-8 xl:px-12 py-6">
         {/* ============================================================ */}
         {/* TAB 1: PRODUCT LINK SCRAPER / EXTRACTOR                      */}
         {/* ============================================================ */}
@@ -1657,18 +1719,68 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                               </span>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 text-xs">
-                              <div>
-                                <span className="text-[10px] text-slate-400 block">Costo Proveedor</span>
-                                <input
-                                  type="number"
-                                  value={item.originalPrice}
-                                  onChange={(e) =>
-                                    handleUpdateScrapedItem(item.id, { originalPrice: Number(e.target.value) })
-                                  }
-                                  className="w-full px-1.5 py-1 bg-slate-800 border border-slate-700 rounded-md text-xs font-mono text-slate-200"
-                                />
+                            {/* Currency toggle for cost */}
+                            <div className="flex items-center justify-between bg-slate-950/80 px-2 py-1.5 rounded-xl border border-slate-800">
+                              <span className="text-[10px] text-slate-400 font-bold">Moneda Costo:</span>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateScrapedItem(item.id, { costCurrency: 'ARS' })}
+                                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer transition-all ${
+                                    item.costCurrency !== 'USD'
+                                      ? 'bg-indigo-600 text-white shadow-xs'
+                                      : 'bg-slate-900 text-slate-400 hover:text-white'
+                                  }`}
+                                >
+                                  🇦🇷 $ ARS
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleUpdateScrapedItem(item.id, { costCurrency: 'USD' })}
+                                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold cursor-pointer transition-all ${
+                                    item.costCurrency === 'USD'
+                                      ? 'bg-emerald-600 text-white shadow-xs'
+                                      : 'bg-slate-900 text-slate-400 hover:text-white'
+                                  }`}
+                                >
+                                  🇺🇸 U$D
+                                </button>
                               </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 text-xs">
+                              {item.costCurrency === 'USD' ? (
+                                <div>
+                                  <span className="text-[10px] text-emerald-400 font-bold block">Costo U$D</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    value={item.costInUsd || ''}
+                                    onChange={(e) =>
+                                      handleUpdateScrapedItem(item.id, {
+                                        costCurrency: 'USD',
+                                        costInUsd: parseFloat(e.target.value) || 0
+                                      })
+                                    }
+                                    className="w-full px-1.5 py-1 bg-slate-800 border border-emerald-500/60 rounded-md text-xs font-mono text-emerald-300 font-bold"
+                                  />
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="text-[10px] text-slate-400 block">Costo $ ARS</span>
+                                  <input
+                                    type="number"
+                                    value={item.originalPrice}
+                                    onChange={(e) =>
+                                      handleUpdateScrapedItem(item.id, {
+                                        costCurrency: 'ARS',
+                                        originalPrice: Number(e.target.value)
+                                      })
+                                    }
+                                    className="w-full px-1.5 py-1 bg-slate-800 border border-slate-700 rounded-md text-xs font-mono text-slate-200 font-bold"
+                                  />
+                                </div>
+                              )}
 
                               <div>
                                 <span className="text-[10px] text-slate-400 block">Margen %</span>
@@ -1683,12 +1795,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                               </div>
 
                               <div>
-                                <span className="text-[10px] text-slate-400 block">Precio Venta</span>
-                                <span className="font-mono font-black text-emerald-400 text-xs block py-1">
+                                <span className="text-[10px] text-emerald-400 font-bold block">P. Venta (ARS)</span>
+                                <span className="font-mono font-black text-emerald-300 text-xs block py-1">
                                   {formatCurrency(item.finalPrice)}
                                 </span>
                               </div>
                             </div>
+
+                            {item.costCurrency === 'USD' && (
+                              <div className="text-[10px] text-emerald-400/90 font-mono bg-emerald-950/40 px-2 py-1 rounded-lg border border-emerald-800/40">
+                                Pesificado: U$D {item.costInUsd || 0} × ${(settings.usdExchangeRate || 1550).toLocaleString('es-AR')} = <strong>$ {item.originalPrice.toLocaleString('es-AR')} ARS</strong> (Precio Venta siempre en pesos)
+                              </div>
+                            )}
 
                             <div className="flex items-center justify-between text-[11px] pt-0.5">
                               <span className="text-slate-400">
@@ -2034,6 +2152,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {unsyncedCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleSyncUnsyncedOnly}
+                      disabled={isSyncingUnsynced}
+                      className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-slate-950 text-xs font-black rounded-xl transition-all shadow-md shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer animate-pulse"
+                      title="Sincronizar artículos que poseen enlace pero aún no fueron sincronizados"
+                    >
+                      <Zap className={`w-3.5 h-3.5 fill-slate-950 ${isSyncingUnsynced ? 'animate-spin' : ''}`} />
+                      <span>{isSyncingUnsynced ? 'Sincronizando...' : `Sincronizar No Sincronizados (${unsyncedCount})`}</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={handleSyncAllCosts}
@@ -2042,7 +2172,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                     title="Actualizar y sincronizar costos de compra de todos los productos conectados con link (Inova ARG, etc.)"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isSyncingAllCosts ? 'animate-spin text-emerald-200' : ''}`} />
-                    <span>{isSyncingAllCosts ? 'Sincronizando Costos...' : 'Actualizar Costos según Enlaces'}</span>
+                    <span>{isSyncingAllCosts ? 'Sincronizando Costos...' : 'Actualizar Todos los Enlaces'}</span>
                     <span className="px-1.5 py-0.5 bg-emerald-950/60 border border-emerald-400/40 text-[10px] font-black rounded-md">
                       {products.filter((p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http')).length}
                     </span>
@@ -2061,6 +2191,73 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                   >
                     Recargar Catálogo
                   </button>
+                </div>
+              </div>
+
+              {/* Sync Filter Status Sub-bar */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 pb-1 border-t border-slate-800/60">
+                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="text-[11px] font-bold text-slate-400 mr-1 flex items-center gap-1">
+                    <RefreshCw className="w-3 h-3 text-indigo-400" />
+                    <span>Estado Sincronización:</span>
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setSyncStatusFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      syncStatusFilter === 'all'
+                        ? 'bg-indigo-600 text-white shadow-xs'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    Todos ({products.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSyncStatusFilter('synced')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      syncStatusFilter === 'synced'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-slate-900 text-emerald-400 hover:text-emerald-300 border border-emerald-900/40'
+                    }`}
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>Sincronizados ({syncedCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSyncStatusFilter('unsynced')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                      syncStatusFilter === 'unsynced'
+                        ? 'bg-amber-500 text-slate-950 font-black shadow-xs'
+                        : 'bg-amber-950/40 text-amber-300 hover:text-amber-200 border border-amber-800/50'
+                    }`}
+                  >
+                    <AlertCircle className="w-3 h-3 text-amber-400" />
+                    <span>No Sincronizados ({unsyncedCount})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSyncStatusFilter('no_link')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      syncStatusFilter === 'no_link'
+                        ? 'bg-slate-700 text-white shadow-xs'
+                        : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    Sin Enlace ({noLinkCount})
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span>Auto-Sync Activo (Detecta cambios de costo)</span>
+                  </span>
                 </div>
               </div>
 
@@ -2245,9 +2442,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                                   >
                                     <Check className="w-2.5 h-2.5 shrink-0" /> Sincronizado
                                   </span>
-                                ) : p.supplierUrl ? (
-                                  <span className="text-[9px] text-slate-500">Con enlace</span>
-                                ) : null}
+                                ) : p.supplierUrl && p.supplierUrl.trim().startsWith('http') ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSyncSingleProductCost(p)}
+                                    disabled={syncingSingleId === p.id}
+                                    className="text-[9px] text-amber-300 hover:text-amber-200 font-bold flex items-center gap-1 mt-0.5 px-1.5 py-0.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-md cursor-pointer transition-colors"
+                                    title="Haz clic para sincronizar el costo de este artículo según su Enlace Dónde Comprar"
+                                  >
+                                    <AlertCircle className="w-2.5 h-2.5 text-amber-400 shrink-0" />
+                                    <span>{syncingSingleId === p.id ? 'Sincronizando...' : 'No sincronizado • Sincronizar'}</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-[9px] text-slate-500">Sin enlace</span>
+                                )}
                               </div>
                             </td>
                             <td className="py-3 px-3">
@@ -2426,9 +2634,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
             {/* Edit Product Modal */}
             {editingProduct && (
-              <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-                  <h3 className="font-extrabold text-white text-base">Editar Producto</h3>
+              <div
+                ref={(node) => {
+                  if (node) node.scrollTop = 0;
+                }}
+                className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-start justify-center p-3 sm:p-6 pt-4 sm:pt-8"
+              >
+                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl mb-12 animate-fade-in">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h3 className="font-extrabold text-white text-base">Editar Producto</h3>
+                    <button
+                      type="button"
+                      onClick={() => setEditingProduct(null)}
+                      className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer"
+                      title="Cerrar modal"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
 
                   <div>
                     <label className="text-[11px] text-slate-400 block mb-1">Título del Producto (Visible en tienda)</label>
@@ -2745,15 +2968,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
             {/* Add Manual Product Modal */}
             {isNewProductModalOpen && (
-              <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-                  <h3 className="font-extrabold text-white text-base">Nuevo Producto Manual</h3>
+              <div
+                ref={(node) => {
+                  if (node) node.scrollTop = 0;
+                }}
+                className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-start justify-center p-3 sm:p-6 pt-4 sm:pt-8"
+              >
+                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl mb-12 animate-fade-in">
+                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+                        <Plus className="w-4 h-4 text-indigo-300" />
+                      </div>
+                      <h3 className="font-extrabold text-white text-base">Nuevo Producto Manual</h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsNewProductModalOpen(false)}
+                      className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-800 hover:bg-slate-700 cursor-pointer"
+                      title="Cerrar modal"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
 
                   <div>
                     <label className="text-[11px] text-slate-400 block mb-1">Título del Producto (Visible en tienda) *</label>
                     <input
                       type="text"
                       required
+                      autoFocus
                       placeholder="Ej. Auriculares Bluetooth Pro"
                       value={newProduct.title}
                       onChange={(e) => setNewProduct({ ...newProduct, title: e.target.value })}
@@ -3699,6 +3943,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                         onChange={(e) => setSettingsForm({ ...settingsForm, announcementText: e.target.value })}
                         className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white"
                       />
+                    </div>
+                  </div>
+
+                  {/* Auto-Sync Costs Settings */}
+                  <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="w-4 h-4 text-emerald-400" />
+                        <span className="text-xs font-black text-emerald-300 uppercase tracking-wider">
+                          Sincronización Automática de Costos en Segundo Plano
+                        </span>
+                      </div>
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={settingsForm.autoSyncCostsEnabled !== false}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, autoSyncCostsEnabled: e.target.checked })}
+                          className="w-4 h-4 rounded text-emerald-600 bg-slate-800 border-slate-700 cursor-pointer"
+                        />
+                        <span>{settingsForm.autoSyncCostsEnabled !== false ? 'Activa' : 'Desactivada'}</span>
+                      </label>
+                    </div>
+
+                    <p className="text-xs text-slate-400">
+                      Si tus proveedores cambian costos en sus páginas web, el sistema verifica periódicamente los enlaces "Dónde Comprar" y recalcula automáticamente los precios finales en pesos argentinos con tu margen de ganancia.
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-3 pt-1">
+                      <div>
+                        <label className="text-[11px] text-slate-400 block mb-1">Frecuencia de Verificación</label>
+                        <select
+                          value={settingsForm.autoSyncIntervalMinutes || 30}
+                          onChange={(e) => setSettingsForm({ ...settingsForm, autoSyncIntervalMinutes: Number(e.target.value) })}
+                          className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white cursor-pointer"
+                        >
+                          <option value={15}>Cada 15 minutos</option>
+                          <option value={30}>Cada 30 minutos (Recomendado)</option>
+                          <option value={60}>Cada 1 hora</option>
+                          <option value={180}>Cada 3 horas</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-end gap-2 pt-4">
+                        <button
+                          type="button"
+                          onClick={handleSyncUnsyncedOnly}
+                          disabled={isSyncingUnsynced}
+                          className="px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Zap className={`w-3.5 h-3.5 ${isSyncingUnsynced ? 'animate-spin' : ''}`} />
+                          <span>Sincronizar Artículos Pendientes ({unsyncedCount})</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 

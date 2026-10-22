@@ -93,7 +93,14 @@ interface StoreContextType {
     supplierName?: string;
     message: string;
   }>;
-  syncAllProductCostsFromLinks: () => Promise<{
+  syncAllProductCostsFromLinks: (onlyUnsynced?: boolean) => Promise<{
+    total: number;
+    updated: number;
+    unchanged: number;
+    failed: number;
+    results: any[];
+  }>;
+  syncUnsyncedProductsFromLinks: () => Promise<{
     total: number;
     updated: number;
     unchanged: number;
@@ -1028,7 +1035,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       body: JSON.stringify({
         url: targetUrl.trim(),
         markupPercentage: prod?.markupPercentage || settings.defaultProfitMargin || 40,
-        currentOriginalPrice: prod?.originalPrice || 0
+        currentOriginalPrice: prod?.originalPrice || 0,
+        costCurrency: prod?.costCurrency || 'ARS',
+        usdExchangeRate: settings.usdExchangeRate || 1550
       })
     });
 
@@ -1039,7 +1048,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const updates: Partial<Product> = {
       originalPrice: data.originalPrice,
-      finalPrice: data.finalPrice,
+      costCurrency: data.costCurrency || prod?.costCurrency || 'ARS',
+      costInUsd: data.costInUsd !== undefined ? data.costInUsd : prod?.costInUsd,
+      finalPrice: data.finalPrice, // ALWAYS IN ARS!
       supplierUrl: targetUrl.trim(),
       lastCostSyncAt: data.syncedAt || new Date().toISOString()
     };
@@ -1062,10 +1073,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   };
 
-  const syncAllProductCostsFromLinks = async () => {
-    const linkedProducts = products.filter(
+  const syncAllProductCostsFromLinks = async (onlyUnsynced: boolean = false) => {
+    let linkedProducts = products.filter(
       (p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http')
     );
+
+    if (onlyUnsynced) {
+      linkedProducts = linkedProducts.filter((p) => !p.lastCostSyncAt);
+    }
 
     if (linkedProducts.length === 0) {
       return { total: 0, updated: 0, unchanged: 0, failed: 0, results: [] };
@@ -1075,11 +1090,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        usdExchangeRate: settings.usdExchangeRate || 1550,
         products: linkedProducts.map((p) => ({
           id: p.id,
           title: p.title,
           supplierUrl: p.supplierUrl,
           markupPercentage: p.markupPercentage || settings.defaultProfitMargin || 40,
+          costCurrency: p.costCurrency || 'ARS',
+          costInUsd: p.costInUsd,
           originalPrice: p.originalPrice,
           finalPrice: p.finalPrice
         }))
@@ -1097,7 +1115,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (r.success && r.newCost > 0) {
         await updateProduct(r.id, {
           originalPrice: r.newCost,
-          finalPrice: r.newFinalPrice,
+          finalPrice: r.newFinalPrice, // ALWAYS IN ARS!
           lastCostSyncAt: data.syncedAt || new Date().toISOString()
         });
       }
@@ -1111,6 +1129,59 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       results: updatedResults
     };
   };
+
+  const syncUnsyncedProductsFromLinks = async () => {
+    return syncAllProductCostsFromLinks(true);
+  };
+
+  // Automatic Background Cost Sync:
+  // Detects if supplier costs change and automatically updates our store in real time
+  useEffect(() => {
+    if (settings.autoSyncCostsEnabled === false) return;
+
+    let isCancelled = false;
+
+    // 1. Initial background check after 8 seconds of page load to sync any unsynchronized products
+    const initialTimer = setTimeout(async () => {
+      if (isCancelled) return;
+      const unsynced = products.filter(
+        (p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http') && !p.lastCostSyncAt
+      );
+      if (unsynced.length > 0) {
+        console.log(`[GangaStore AutoSync] Sincronizando ${unsynced.length} productos pendientes de enlace...`);
+        try {
+          await syncAllProductCostsFromLinks(true);
+        } catch (err: any) {
+          console.warn('[GangaStore AutoSync] Notificación inicial:', err.message);
+        }
+      }
+    }, 8000);
+
+    // 2. Periodic background sync for all linked products to automatically detect cost changes
+    const intervalMinutes = settings.autoSyncIntervalMinutes || 30;
+    const intervalMs = Math.max(5, intervalMinutes) * 60 * 1000;
+
+    const periodicInterval = setInterval(async () => {
+      if (isCancelled) return;
+      const linked = products.filter(
+        (p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http')
+      );
+      if (linked.length > 0) {
+        console.log(`[GangaStore AutoSync] Verificando costos de proveedores en segundo plano (${linked.length} productos)...`);
+        try {
+          await syncAllProductCostsFromLinks(false);
+        } catch (err: any) {
+          console.warn('[GangaStore AutoSync] Error periódico:', err.message);
+        }
+      }
+    }, intervalMs);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(initialTimer);
+      clearInterval(periodicInterval);
+    };
+  }, [settings.autoSyncCostsEnabled, settings.autoSyncIntervalMinutes, products.length]);
 
   return (
     <StoreContext.Provider
@@ -1174,7 +1245,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateSupplierOrderStatus,
         deleteSupplierOrder,
         syncProductCostFromLink,
-        syncAllProductCostsFromLinks
+        syncAllProductCostsFromLinks,
+        syncUnsyncedProductsFromLinks
       }}
     >
       {children}
