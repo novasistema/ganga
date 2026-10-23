@@ -135,10 +135,10 @@ function StoreApp() {
         />
 
         {/* Products Section */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="max-w-[1760px] w-full mx-auto px-4 sm:px-8 xl:px-12 py-6">
           {isLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-              {[...Array(8)].map((_, i) => (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-6">
+              {[...Array(12)].map((_, i) => (
                 <div key={i} className="bg-white rounded-2xl p-4 border border-gray-100 space-y-3 animate-pulse">
                   <div className="aspect-square bg-gray-200 rounded-xl" />
                   <div className="h-4 bg-gray-200 rounded-md w-3/4" />
@@ -203,7 +203,7 @@ function StoreApp() {
                   </div>
 
                   {/* Grid for this category */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-6">
                     {group.items.map((product) => (
                       <ProductCard key={product.id} product={product} />
                     ))}
@@ -213,7 +213,7 @@ function StoreApp() {
             </div>
           ) : (
             /* Standard Grid View */
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-6">
               {filteredProducts.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}

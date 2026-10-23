@@ -209,7 +209,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onEditBanners }) => {
     <div
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
-      className={`group relative overflow-hidden bg-gradient-to-br ${gradientClass} text-white rounded-3xl mx-4 sm:mx-6 lg:mx-auto max-w-7xl mt-4 sm:mt-6 shadow-2xl border border-indigo-900/50 transition-all duration-700`}
+      className={`group relative overflow-hidden bg-gradient-to-br ${gradientClass} text-white rounded-3xl mx-4 sm:mx-8 xl:mx-12 lg:mx-auto max-w-[1760px] mt-4 sm:mt-6 shadow-2xl border border-indigo-900/50 transition-all duration-700`}
     >
       {/* Decorative background glows */}
       <div className="absolute top-0 right-0 -mt-12 -mr-12 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />

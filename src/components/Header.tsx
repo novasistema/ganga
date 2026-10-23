@@ -49,8 +49,8 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-xs">
       {/* Top Announcement Bar */}
       {settings.announcementText && (
-        <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-900 text-white text-xs py-2 px-4">
-          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="bg-gradient-to-r from-indigo-900 via-indigo-800 to-blue-900 text-white text-xs py-2 px-4 sm:px-8 xl:px-12">
+          <div className="max-w-[1760px] w-full mx-auto flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
               <span className="flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
               <span className="font-medium tracking-wide truncate">{settings.announcementText}</span>
@@ -70,7 +70,7 @@ export const Header: React.FC<HeaderProps> = ({
       )}
 
       {/* Main Navbar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-4">
+      <div className="max-w-[1760px] w-full mx-auto px-4 sm:px-8 xl:px-12 py-3.5 flex items-center justify-between gap-4">
         {/* Brand Logo */}
         <div className="flex items-center gap-3">
           <button
@@ -101,7 +101,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Search Bar (Only in customer view) */}
         {!isAdminView && (
-          <div className="flex-1 max-w-xl mx-2 hidden md:block">
+          <div className="flex-1 max-w-2xl mx-2 hidden md:block">
             <div
               className={`relative flex items-center rounded-xl border transition-all ${
                 isSearchFocused

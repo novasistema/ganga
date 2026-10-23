@@ -21,7 +21,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenLogin, isAdmin, onOpenAdmi
     <footer className="bg-slate-950 text-slate-300 border-t border-slate-800 mt-20">
       {/* Trust Pillars */}
       <div className="border-b border-slate-800/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="max-w-[1760px] w-full mx-auto px-4 sm:px-8 xl:px-12 py-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/20">
               <Truck className="w-5 h-5" />
@@ -65,7 +65,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenLogin, isAdmin, onOpenAdmi
       </div>
 
       {/* Main Footer Links & Info */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 grid grid-cols-1 md:grid-cols-12 gap-8">
+      <div className="max-w-[1760px] w-full mx-auto px-4 sm:px-8 xl:px-12 py-12 grid grid-cols-1 md:grid-cols-12 gap-8">
         <div className="md:col-span-5 space-y-3">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-600 flex items-center justify-center text-white">

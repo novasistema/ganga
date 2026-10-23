@@ -49,7 +49,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
   }, [categories]);
 
   return (
-    <div id="catalog-section" className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-3">
+    <div id="catalog-section" className="max-w-[1760px] w-full mx-auto px-4 sm:px-8 xl:px-12 pt-8 pb-3">
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-5">
         <div>

@@ -381,8 +381,13 @@ export const BannerManager: React.FC = () => {
       {/* BANNER MODAL EDITOR                                         */}
       {/* ============================================================ */}
       {editingBanner && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 animate-fade-in">
-          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-4xl w-full p-5 sm:p-7 space-y-5 shadow-2xl text-slate-200 max-h-[92vh] flex flex-col">
+        <div
+          ref={(node) => {
+            if (node) node.scrollTop = 0;
+          }}
+          className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-start justify-center p-3 sm:p-6 pt-4 sm:pt-8 animate-fade-in"
+        >
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-4xl w-full p-5 sm:p-7 space-y-5 shadow-2xl text-slate-200 max-h-[92vh] flex flex-col mb-12">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">

@@ -2529,8 +2529,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
             {/* Modal: Confirm Deletion of Single Product */}
             {productToDelete && (
-              <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+              <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-start justify-center p-3 sm:p-6 pt-8 sm:pt-12 animate-fade-in">
+                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl mb-12">
                   <div className="flex items-center gap-3">
                     <div className="p-3 bg-rose-500/20 text-rose-400 rounded-2xl border border-rose-500/30">
                       <Trash2 className="w-6 h-6" />
@@ -2593,8 +2593,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
             {/* Modal: Confirm Bulk Deletion */}
             {showBulkDeleteConfirm && (
-              <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+              <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-start justify-center p-3 sm:p-6 pt-8 sm:pt-12 animate-fade-in">
+                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl mb-12">
                   <div className="flex items-center gap-3">
                     <div className="p-3 bg-rose-500/20 text-rose-400 rounded-2xl border border-rose-500/30">
                       <Trash2 className="w-6 h-6" />
@@ -3350,8 +3350,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
             {/* Modal: Summary of Cost Synchronization by Link */}
             {syncSummaryModal && (
-              <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
-                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-2xl w-full p-6 space-y-5 shadow-2xl">
+              <div
+                ref={(node) => {
+                  if (node) node.scrollTop = 0;
+                }}
+                className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-xs flex items-start justify-center p-3 sm:p-6 pt-4 sm:pt-8 animate-fade-in"
+              >
+                <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-2xl w-full p-6 space-y-5 shadow-2xl mb-12">
                   <div className="flex items-center justify-between border-b border-slate-800 pb-4">
                     <div className="flex items-center gap-3">
                       <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-2xl border border-emerald-500/30">
