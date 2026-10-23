@@ -124,27 +124,70 @@ export const ProductDetailModal: React.FC = () => {
               </div>
             </div>
 
+            {/* Out-of-Stock / Removed Cartel Banner */}
+            {(() => {
+              const isAgotado = selectedProduct.inStock === false || selectedProduct.finalPrice === 0 || (selectedProduct.stock !== undefined && selectedProduct.stock <= 0) || selectedProduct.lastVerifiedStatus === 'out_of_stock';
+              if (!isAgotado) return null;
+              return (
+                <div className="mb-4 p-4 bg-red-500/10 border-2 border-red-500 rounded-2xl flex items-start gap-3">
+                  <div className="p-2 bg-red-600 text-white rounded-xl shrink-0 mt-0.5">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-red-600 uppercase tracking-wide">
+                      🚫 CARTEL DE PRODUCTO AGOTADO
+                    </h3>
+                    <p className="text-xs text-red-700 font-medium mt-0.5">
+                      Este producto no se encuentra disponible en la web del proveedor. Su precio ha sido fijado automáticamente en <strong>$ 0</strong> y no admite compras ni pedidos hasta nuevo aviso de stock.
+                    </p>
+                  </div>
+                </div>
+              );
+            })()}
+
             <h2 className="text-xl sm:text-2xl font-black text-gray-900 leading-snug">
               {selectedProduct.title}
             </h2>
 
             {/* Price Box */}
-            <div className="mt-3 p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
-              <div className="flex items-baseline gap-2.5">
-                <span className="text-2xl sm:text-3xl font-black text-gray-950">
-                  {formatCurrency(selectedProduct.finalPrice)}
-                </span>
-                <span className="text-xs text-gray-400 line-through">
-                  {formatCurrency(Math.round(selectedProduct.finalPrice * 1.35))}
-                </span>
-                <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-1.5 py-0.5 rounded-md">
-                  AHORRAS 35%
-                </span>
-              </div>
-              <p className="text-xs text-emerald-600 font-semibold mt-1">
-                💳 Hasta 3 cuotas fijas de {formatCurrency(Math.round(selectedProduct.finalPrice / 3))}
-              </p>
-            </div>
+            {(() => {
+              const isAgotado = selectedProduct.inStock === false || selectedProduct.finalPrice === 0 || (selectedProduct.stock !== undefined && selectedProduct.stock <= 0) || selectedProduct.lastVerifiedStatus === 'out_of_stock';
+              if (isAgotado) {
+                return (
+                  <div className="mt-3 p-3.5 bg-red-50 rounded-2xl border border-red-200">
+                    <div className="flex items-baseline gap-2.5">
+                      <span className="text-2xl sm:text-3xl font-black text-red-600">
+                        $ 0
+                      </span>
+                      <span className="bg-red-600 text-white text-xs font-black px-2.5 py-1 rounded-md uppercase tracking-wider">
+                        AGOTADO
+                      </span>
+                    </div>
+                    <p className="text-xs text-red-700 font-semibold mt-1">
+                      🚫 Sin existencias en depósito ni en catálogo de proveedor
+                    </p>
+                  </div>
+                );
+              }
+              return (
+                <div className="mt-3 p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
+                  <div className="flex items-baseline gap-2.5">
+                    <span className="text-2xl sm:text-3xl font-black text-gray-950">
+                      {formatCurrency(selectedProduct.finalPrice)}
+                    </span>
+                    <span className="text-xs text-gray-400 line-through">
+                      {formatCurrency(Math.round(selectedProduct.finalPrice * 1.35))}
+                    </span>
+                    <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-1.5 py-0.5 rounded-md">
+                      AHORRAS 35%
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-600 font-semibold mt-1">
+                    💳 Hasta 3 cuotas fijas de {formatCurrency(Math.round(selectedProduct.finalPrice / 3))}
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Description */}
             <div className="mt-4">
@@ -172,63 +215,83 @@ export const ProductDetailModal: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Zap className="w-4 h-4 text-amber-500 shrink-0" />
-                <span>Stock: {selectedProduct.stock} unidades</span>
+                <span>Stock: {selectedProduct.inStock ? selectedProduct.stock : 0} unidades</span>
               </div>
             </div>
           </div>
 
           {/* Action Bar */}
           <div className="mt-6 pt-4 border-t border-gray-100 space-y-3">
-            {/* Quantity Selector */}
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-700">Cantidad:</span>
-              <div className="flex items-center border border-gray-200 rounded-xl bg-gray-50">
-                <button
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="p-2 text-gray-600 hover:text-gray-900 cursor-pointer"
-                >
-                  <Minus className="w-3.5 h-3.5" />
-                </button>
-                <span className="px-3 text-sm font-bold text-gray-900">{quantity}</span>
-                <button
-                  onClick={() => setQuantity((q) => Math.min(selectedProduct.stock, q + 1))}
-                  className="p-2 text-gray-600 hover:text-gray-900 cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
+            {(() => {
+              const isAgotado = selectedProduct.inStock === false || selectedProduct.finalPrice === 0 || (selectedProduct.stock !== undefined && selectedProduct.stock <= 0) || selectedProduct.lastVerifiedStatus === 'out_of_stock';
+              if (isAgotado) {
+                return (
+                  <button
+                    disabled
+                    className="w-full py-3.5 px-4 rounded-xl text-xs font-black bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    <span>🚫 Producto Agotado (No Disponible para Compra)</span>
+                  </button>
+                );
+              }
+              return (
+                <>
+                  {/* Quantity Selector */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-700">Cantidad:</span>
+                    <div className="flex items-center border border-gray-200 rounded-xl bg-gray-50">
+                      <button
+                        onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                        className="p-2 text-gray-600 hover:text-gray-900 cursor-pointer"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="px-3 text-sm font-bold text-gray-900">{quantity}</span>
+                      <button
+                        onClick={() => setQuantity((q) => Math.min(selectedProduct.stock, q + 1))}
+                        className="p-2 text-gray-600 hover:text-gray-900 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
 
-            <div className="flex gap-2.5">
-              <button
-                onClick={handleAddToCart}
-                className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                  added
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-                }`}
-              >
-                {added ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>¡Agregado al Carrito!</span>
-                  </>
-                ) : (
-                  <>
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>Agregar al Carrito</span>
-                  </>
-                )}
-              </button>
+                  <div className="flex gap-2.5">
+                    <button
+                      onClick={handleAddToCart}
+                      className={`flex-1 py-3 px-4 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        added
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                      }`}
+                    >
+                      {added ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>¡Agregado al Carrito!</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingBag className="w-4 h-4" />
+                          <span>Agregar al Carrito</span>
+                        </>
+                      )}
+                    </button>
 
-              <button
-                onClick={handleBuyNow}
-                className="flex-1 py-3 px-4 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-1 cursor-pointer"
-              >
-                <span>Comprar Ahora</span>
-              </button>
-            </div>
+                    <button
+                      onClick={handleBuyNow}
+                      className="flex-1 py-3 px-4 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <span>Comprar Ahora</span>
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </div>
+        </div>
+      </div>
+    </div>
         </div>
       </div>
     </div>

@@ -68,15 +68,27 @@ export const Footer: React.FC<FooterProps> = ({ onOpenLogin, isAdmin, onOpenAdmi
       <div className="max-w-[1760px] w-full mx-auto px-4 sm:px-8 xl:px-12 py-12 grid grid-cols-1 md:grid-cols-12 gap-8">
         <div className="md:col-span-5 space-y-3">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-600 flex items-center justify-center text-white">
-              <Sparkles className="w-4 h-4 text-amber-300" />
-            </div>
-            <span className="font-extrabold text-lg text-white tracking-tight">
-              {settings.companyName || 'DropStore'}
-            </span>
+            {settings.logoUrl ? (
+              <div className="bg-white p-2 rounded-2xl shadow-xs inline-flex items-center justify-center">
+                <img
+                  src={settings.logoUrl}
+                  alt={settings.companyName || 'Nova Import'}
+                  className="h-10 sm:h-12 w-auto object-contain max-w-[210px]"
+                />
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-blue-600 flex items-center justify-center text-white">
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                </div>
+                <span className="font-extrabold text-lg text-white tracking-tight">
+                  {settings.companyName || 'Nova Import'}
+                </span>
+              </div>
+            )}
           </div>
           <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
-            Plataforma especializada en dropshipping y e-commerce con catálogo en tiempo real sincronizado en Firebase. Seleccionamos los mejores productos del mercado global para entregártelos directo en tu casa.
+            Tus socios en el mercado global. Plataforma especializada en importación, dropshipping y e-commerce con catálogo en tiempo real. Seleccionamos los mejores productos del mercado global para entregártelos directo a tu domicilio o local.
           </p>
           <div className="pt-2">
             <a

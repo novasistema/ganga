@@ -163,7 +163,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       settingsDocRef,
       (docSnap) => {
         if (docSnap.exists()) {
-          setSettings(docSnap.data() as CompanySettings);
+          const remoteData = docSnap.data() as CompanySettings;
+          setSettings({
+            ...DEFAULT_SETTINGS,
+            ...remoteData,
+            companyName: remoteData.companyName || DEFAULT_SETTINGS.companyName,
+            logoUrl: remoteData.logoUrl || DEFAULT_SETTINGS.logoUrl
+          });
         } else {
           // Initialize with default settings in Firestore
           setDoc(settingsDocRef, DEFAULT_SETTINGS).catch((err) => {
@@ -1046,28 +1052,36 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       throw new Error(data.error || 'No se pudo leer el costo desde el enlace.');
     }
 
+    const isOut = Boolean(data.isDiscontinuedOrNotFound) || data.inStock === false || data.originalPrice === 0 || data.finalPrice === 0;
+
     const updates: Partial<Product> = {
-      originalPrice: data.originalPrice,
+      originalPrice: isOut ? 0 : data.originalPrice,
       costCurrency: data.costCurrency || prod?.costCurrency || 'ARS',
-      costInUsd: data.costInUsd !== undefined ? data.costInUsd : prod?.costInUsd,
-      finalPrice: data.finalPrice, // ALWAYS IN ARS!
+      costInUsd: isOut ? 0 : (data.costInUsd !== undefined ? data.costInUsd : prod?.costInUsd),
+      finalPrice: isOut ? 0 : data.finalPrice, // ALWAYS IN ARS! $0 if out of stock
       supplierUrl: targetUrl.trim(),
+      inStock: !isOut,
+      stock: isOut ? 0 : (prod?.stock ?? 25),
+      lastVerifiedStatus: isOut ? 'out_of_stock' : 'in_stock',
       lastCostSyncAt: data.syncedAt || new Date().toISOString()
     };
     if (data.supplierName) updates.supplierName = data.supplierName;
-    if (typeof data.inStock === 'boolean') updates.inStock = data.inStock;
 
     await updateProduct(productId, updates);
 
     return {
       success: true,
       oldCost: data.oldCost,
-      newCost: data.originalPrice,
-      newFinalPrice: data.finalPrice,
+      newCost: isOut ? 0 : data.originalPrice,
+      newFinalPrice: isOut ? 0 : data.finalPrice,
       priceChanged: Boolean(data.priceChanged),
       diff: Number(data.diff) || 0,
       supplierName: data.supplierName,
-      message: data.priceChanged
+      inStock: !isOut,
+      isDiscontinuedOrNotFound: isOut,
+      message: isOut
+        ? `⚠️ El producto no está más en la web del proveedor. Se agregó el cartel de AGOTADO y su precio se fijó en $0.`
+        : data.priceChanged
         ? `Costo actualizado de $${data.oldCost?.toLocaleString('es-AR')} a $${data.originalPrice?.toLocaleString('es-AR')}`
         : `Costo sin cambios ($${data.originalPrice?.toLocaleString('es-AR')})`
     };
@@ -1112,10 +1126,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Apply updates to products in state and Firestore
     const updatedResults = data.results || [];
     for (const r of updatedResults) {
-      if (r.success && r.newCost > 0) {
+      if (r.isDiscontinuedOrNotFound || r.inStock === false || r.newCost === 0 || r.newFinalPrice === 0) {
+        await updateProduct(r.id, {
+          originalPrice: 0,
+          costInUsd: 0,
+          finalPrice: 0, // $0
+          inStock: false,
+          stock: 0,
+          lastVerifiedStatus: 'out_of_stock',
+          lastCostSyncAt: data.syncedAt || new Date().toISOString()
+        });
+      } else if (r.success && r.newCost > 0) {
         await updateProduct(r.id, {
           originalPrice: r.newCost,
           finalPrice: r.newFinalPrice, // ALWAYS IN ARS!
+          inStock: true,
+          lastVerifiedStatus: 'in_stock',
           lastCostSyncAt: data.syncedAt || new Date().toISOString()
         });
       }

@@ -68,12 +68,12 @@ export const DEFAULT_CATEGORIES: StoreCategory[] = [
 ];
 
 export const DEFAULT_SETTINGS: CompanySettings = {
-  companyName: 'GangaStore Dropshipping',
-  email: 'contacto@gangastore.com',
+  companyName: 'Nova Import',
+  email: 'contacto@novaimport.com',
   phone: '+54 9 11 4055-7890',
   whatsappNumber: '5491140557890',
   address: 'Av. Santa Fe 3200, CABA, Argentina',
-  logoUrl: '',
+  logoUrl: '/assets/aistudio/LOGO_55e42e2f.jpg',
   defaultProfitMargin: 40,
   usdExchangeRate: 1550,
   dollarRateType: 'blue',

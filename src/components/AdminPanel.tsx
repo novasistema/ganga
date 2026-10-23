@@ -254,6 +254,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     let supplierName = 'Proveedor Web';
     if (host.includes('inovaarg') || host.includes('inova')) supplierName = 'Inova ARG';
     else if (host.includes('plutotec')) supplierName = 'Plutotec';
+    else if (host.includes('kiranimport') || host.includes('kiran')) supplierName = 'Kiranimport';
     else if (host.includes('mercadolibre')) supplierName = 'Mercado Libre';
     else if (host.includes('tiendanube')) supplierName = 'Tiendanube';
 
@@ -273,7 +274,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
     const isFromInova = host.includes('inovaarg') || host.includes('inova');
 
-    let category = isFromInova ? 'Catálogo Inova' : 'Hogar & Bazar';
+    let category = isFromInova ? 'Catálogo Inova' : (host.includes('kiran') ? 'Herramientas' : 'Hogar & Bazar');
     const catMatch = pathname.match(/\/categoria\/([^/]+)/i);
     if (catMatch && catMatch[1]) {
       const rawCat = decodeURIComponent(catMatch[1]).replace(/[-_]+/g, ' ').trim();
@@ -281,14 +282,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     }
 
     let estimatedCost = 15000;
+    let itemCurrency: 'ARS' | 'USD' = host.includes('kiran') ? 'USD' : extractorCostCurrency;
+    let costUsdExplicit: number | undefined = undefined;
     let imageUrl = isFromInova
       ? 'https://inovaarg.com/wp-content/uploads/2026/02/IMG-20220218-WA0085.webp'
       : host.includes('plutotec')
       ? 'https://pub-1bbaf3059e0a4ec6a42b48b9be45c1d2.r2.dev/products/1790702850414-CP220.jpg'
+      : host.includes('kiran')
+      ? '/assets/kiran_herramientas_set.jpg'
       : DEFAULT_PRODUCT_PLACEHOLDER;
     let description = `Artículo del catálogo de ${supplierName}. Calidad verificada listo para comercializar con margen calculado.`;
 
     if (
+      lower.includes('set de herramientas') ||
+      lower.includes('herramientas profesional') ||
+      lower.includes('amarilla x 10') ||
+      lower.includes('set-de-herramientas') ||
+      (host.includes('kiran') && (lower.includes('herramientas') || lower.includes('set') || lower.includes('amarilla')))
+    ) {
+      title = 'SET DE HERRAMIENTAS PROFESIONAL PCS AMARILLA X 10';
+      category = 'Herramientas';
+      estimatedCost = 41.31;
+      costUsdExplicit = 41.31;
+      itemCurrency = 'USD';
+      imageUrl = '/assets/kiran_herramientas_set.jpg';
+      description = 'Set de herramientas profesionales completo en maletín rígido transportable con taladro inalámbrico percutor amarillo, doble batería de litio, cargador rápido, destornilladores, alicate, cutter, cinta métrica y juego de puntas y llaves.';
+      supplierName = 'Kiranimport';
+    } else if (
       lower.includes('afeitadora') ||
       lower.includes('cp220') ||
       lower.includes('cp-220') ||
@@ -370,9 +390,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
     const rate = settings.usdExchangeRate || 1550;
     let costArs = estimatedCost;
-    let costUsdVal: number | undefined = undefined;
-    if (extractorCostCurrency === 'USD') {
-      costUsdVal = Math.round((estimatedCost / rate) * 10) / 10;
+    let costUsdVal: number | undefined = costUsdExplicit;
+    if (itemCurrency === 'USD') {
+      costUsdVal = costUsdExplicit !== undefined ? costUsdExplicit : Math.round((estimatedCost / rate) * 10) / 10;
       costArs = Math.round(costUsdVal * rate);
     }
     const finalPrice = Math.round(costArs * (1 + margin / 100)); // Precio de venta SIEMPRE en Pesos ($ ARS)
@@ -382,7 +402,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
       title,
       description,
       originalPrice: costArs,
-      costCurrency: extractorCostCurrency,
+      costCurrency: itemCurrency,
       costInUsd: costUsdVal,
       markupPercentage: margin,
       finalPrice,

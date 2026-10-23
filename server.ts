@@ -231,6 +231,8 @@ export interface SlugProductDetails {
   category: string;
   description: string;
   estimatedCost: number;
+  costCurrency?: 'ARS' | 'USD';
+  costInUsd?: number;
   imageUrl: string;
   supplierName: string;
 }
@@ -254,6 +256,8 @@ export const extractDetailsFromSlugAndDomain = (targetUrl: string): SlugProductD
     supplierName = 'Inova ARG';
   } else if (host.includes('plutotec')) {
     supplierName = 'Plutotec';
+  } else if (host.includes('kiranimport') || host.includes('kiran')) {
+    supplierName = 'Kiranimport';
   } else if (host.includes('mercadolibre')) {
     supplierName = 'Mercado Libre';
   } else if (host.includes('tiendanube')) {
@@ -275,6 +279,26 @@ export const extractDetailsFromSlugAndDomain = (targetUrl: string): SlugProductD
   const lowerText = (cleanedSlug + ' ' + pathname).toLowerCase();
 
   const isFromInova = host.includes('inovaarg') || host.includes('inova');
+
+  // Recognition for Kiranimport Set de Herramientas Profesional PCS Amarilla x 10
+  if (
+    lowerText.includes('set de herramientas') ||
+    lowerText.includes('herramientas profesional') ||
+    lowerText.includes('amarilla x 10') ||
+    lowerText.includes('set-de-herramientas') ||
+    (host.includes('kiran') && (lowerText.includes('herramientas') || lowerText.includes('set') || lowerText.includes('amarilla')))
+  ) {
+    return {
+      title: 'SET DE HERRAMIENTAS PROFESIONAL PCS AMARILLA X 10',
+      category: 'Herramientas',
+      description: 'Set de herramientas profesionales completo en maletín rígido transportable con taladro inalámbrico percutor amarillo, doble batería de litio, cargador rápido, destornilladores, alicate, cutter, cinta métrica y juego de puntas y llaves.',
+      estimatedCost: 41.31,
+      costCurrency: 'USD',
+      costInUsd: 41.31,
+      imageUrl: '/assets/kiran_herramientas_set.jpg',
+      supplierName: 'Kiranimport'
+    };
+  }
 
   // Recognition for Afeitadora Inalámbrica Onica CP220 and Plutotec products
   if (
@@ -564,6 +588,8 @@ export function cleanHighResImageUrl(imgUrl: string): string {
 export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
   cost: number;
   originalPrice: number;
+  costCurrency?: 'ARS' | 'USD';
+  costInUsd?: number;
   title: string;
   description: string;
   category: string;
@@ -571,6 +597,7 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
   galleryUrls: string[];
   supplierName: string;
   inStock: boolean;
+  isDiscontinuedOrNotFound?: boolean;
   source: 'live' | 'demo' | 'fallback';
 }> {
   const normUrl = normalizeUrl(targetUrl);
@@ -578,6 +605,8 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     return {
       cost: 0,
       originalPrice: 0,
+      costCurrency: 'ARS',
+      costInUsd: 0,
       title: '',
       description: '',
       category: 'General',
@@ -585,6 +614,7 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
       galleryUrls: [],
       supplierName: 'Desconocido',
       inStock: false,
+      isDiscontinuedOrNotFound: true,
       source: 'fallback'
     };
   }
@@ -605,6 +635,7 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     return {
       cost: demoCost,
       originalPrice: demoCost,
+      costCurrency: 'ARS',
       title: slugData.title || 'Producto Demo',
       description: slugData.description,
       category: slugData.category,
@@ -612,9 +643,12 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
       galleryUrls: [slugData.imageUrl],
       supplierName: 'Proveedor Demo',
       inStock: true,
+      isDiscontinuedOrNotFound: false,
       source: 'demo'
     };
   }
+
+  const slugData = extractDetailsFromSlugAndDomain(url);
 
   try {
     const controller = new AbortController();
@@ -632,15 +666,58 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     });
     clearTimeout(timeout);
 
+    // If HTTP 404 or 410 -> Product no longer exists on supplier's web!
+    if (response.status === 404 || response.status === 410) {
+      return {
+        cost: 0,
+        originalPrice: 0,
+        costCurrency: slugData.costCurrency || 'ARS',
+        costInUsd: 0,
+        title: slugData.title,
+        description: 'Este producto ya no se encuentra en la web del proveedor (Agotado o eliminado).',
+        category: slugData.category,
+        imageUrl: slugData.imageUrl,
+        galleryUrls: [slugData.imageUrl],
+        supplierName: slugData.supplierName,
+        inStock: false,
+        isDiscontinuedOrNotFound: true,
+        source: 'live'
+      };
+    }
+
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
+    }
+
+    // Check if redirected to home or catalog root (indicating removed product)
+    const finalUrl = (response.url || '').toLowerCase();
+    if (
+      url.includes('/producto/') &&
+      !finalUrl.includes('producto') &&
+      !finalUrl.includes('item') &&
+      !finalUrl.includes('articulo')
+    ) {
+      return {
+        cost: 0,
+        originalPrice: 0,
+        costCurrency: slugData.costCurrency || 'ARS',
+        costInUsd: 0,
+        title: slugData.title,
+        description: 'El enlace fue redirigido porque el artículo ya no existe en la tienda del proveedor.',
+        category: slugData.category,
+        imageUrl: slugData.imageUrl,
+        galleryUrls: [slugData.imageUrl],
+        supplierName: slugData.supplierName,
+        inStock: false,
+        isDiscontinuedOrNotFound: true,
+        source: 'live'
+      };
     }
 
     const html = await response.text();
     const $ = cheerio.load(html);
 
     const supplierName = detectSupplierName(url, $);
-    const slugData = extractDetailsFromSlugAndDomain(url);
 
     let extractedCost = 0;
     let foundTitle = '';
@@ -650,17 +727,42 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
     let foundImage = '';
     const galleryCandidates: string[] = [];
 
-    // Check Out of Stock indicators in text or classes
+    // Check Out of Stock / 404 indicators in text or classes
     const pageText = $('body').text().toLowerCase();
-    if (
-      $('.out-of-stock, .stock.out-of-stock').length > 0 ||
-      pageText.includes('agotado') ||
-      pageText.includes('sin stock') ||
-      pageText.includes('no disponible')
-    ) {
-      if (!pageText.includes('hay existencias') && !pageText.includes('en stock')) {
-        inStock = false;
-      }
+    const isNotFoundPage =
+      $('body.error404, .error-404, .not-found').length > 0 ||
+      pageText.includes('página no encontrada') ||
+      pageText.includes('pagina no encontrada') ||
+      pageText.includes('error 404') ||
+      pageText.includes('producto no encontrado') ||
+      pageText.includes('no se encontró el producto') ||
+      pageText.includes('no existe este producto') ||
+      pageText.includes('publicación pausada') ||
+      pageText.includes('publicación finalizada');
+
+    const isOutOfStockPage =
+      $('.out-of-stock, .stock.out-of-stock, .sold-out').length > 0 ||
+      (pageText.includes('agotado') && !pageText.includes('no agotado')) ||
+      (pageText.includes('sin stock') && !pageText.includes('hay stock')) ||
+      (pageText.includes('sin existencias') && !pageText.includes('con existencias')) ||
+      pageText.includes('este producto ya no está disponible');
+
+    if (isNotFoundPage || isOutOfStockPage) {
+      return {
+        cost: 0,
+        originalPrice: 0,
+        costCurrency: slugData.costCurrency || 'ARS',
+        costInUsd: 0,
+        title: foundTitle || slugData.title,
+        description: 'Este producto ya no se encuentra disponible en la web del proveedor (Agotado).',
+        category: foundCategory || slugData.category,
+        imageUrl: foundImage || slugData.imageUrl,
+        galleryUrls: [foundImage || slugData.imageUrl],
+        supplierName: supplierName || slugData.supplierName,
+        inStock: false,
+        isDiscontinuedOrNotFound: true,
+        source: 'live'
+      };
     }
 
     // 0. Next.js App Router (RSC streaming payload) / Embedded JSON Product Data (Plutotec, Next.js, Tiendanube, Shopify)
@@ -918,9 +1020,31 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
   } catch (err: any) {
     console.warn(`Could not extract cost from ${url}, using smart slug heuristic:`, err.message);
     const slugData = extractDetailsFromSlugAndDomain(url);
+
+    // If HTTP 404 or 410 error -> Product was removed/discontinued on supplier web!
+    if (err.message && (err.message.includes('404') || err.message.includes('410') || err.message.includes('not found'))) {
+      return {
+        cost: 0,
+        originalPrice: 0,
+        costCurrency: slugData.costCurrency || 'ARS',
+        costInUsd: 0,
+        title: slugData.title,
+        description: 'Este producto ya no se encuentra en la web del proveedor.',
+        category: slugData.category,
+        imageUrl: slugData.imageUrl,
+        galleryUrls: [slugData.imageUrl],
+        supplierName: slugData.supplierName,
+        inStock: false,
+        isDiscontinuedOrNotFound: true,
+        source: 'live'
+      };
+    }
+
     return {
       cost: slugData.estimatedCost,
       originalPrice: slugData.estimatedCost,
+      costCurrency: slugData.costCurrency || 'ARS',
+      costInUsd: slugData.costInUsd,
       title: slugData.title,
       description: slugData.description,
       category: slugData.category,
@@ -928,6 +1052,7 @@ export async function extractLiveCostFromUrl(targetUrl: string): Promise<{
       galleryUrls: [slugData.imageUrl],
       supplierName: slugData.supplierName,
       inStock: true,
+      isDiscontinuedOrNotFound: false,
       source: 'fallback'
     };
   }
@@ -1725,11 +1850,11 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
       }
 
       // Graceful instant extraction from URL slug and keywords
-      const rawCost = slugData.estimatedCost > 0 ? slugData.estimatedCost : 12000;
-      let costArs = rawCost;
-      let costUsdVal: number | undefined = undefined;
-      if (costCurrency === 'USD') {
-        costUsdVal = rawCost;
+      const isUsd = costCurrency === 'USD' || slugData.costCurrency === 'USD' || Boolean(slugData.costInUsd);
+      let costUsdVal: number | undefined = slugData.costInUsd;
+      let costArs = slugData.estimatedCost > 0 ? slugData.estimatedCost : 12000;
+      if (isUsd) {
+        costUsdVal = slugData.costInUsd || slugData.estimatedCost;
         costArs = Math.round(costUsdVal * Number(usdExchangeRate || 1550));
       }
       const finalPrice = Math.round(costArs * (1 + margin / 100));
@@ -1739,7 +1864,7 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
         title: slugData.title,
         description: slugData.description,
         originalPrice: costArs,
-        costCurrency: costCurrency === 'USD' ? 'USD' : 'ARS',
+        costCurrency: isUsd ? 'USD' : 'ARS',
         costInUsd: costUsdVal,
         markupPercentage: margin,
         finalPrice,
@@ -1768,7 +1893,14 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
     const targetUrl = normalizeUrl(req.body?.url || '');
     const margin = Number(req.body?.markupPercentage) || 35;
     const slugData = extractDetailsFromSlugAndDomain(targetUrl || 'https://inovaarg.com');
-    const finalPrice = Math.round(slugData.estimatedCost * (1 + margin / 100));
+    const isUsd = req.body?.costCurrency === 'USD' || slugData.costCurrency === 'USD' || Boolean(slugData.costInUsd);
+    let costUsdVal: number | undefined = slugData.costInUsd;
+    let costArs = slugData.estimatedCost > 0 ? slugData.estimatedCost : 12000;
+    if (isUsd) {
+      costUsdVal = slugData.costInUsd || slugData.estimatedCost;
+      costArs = Math.round(costUsdVal * Number(req.body?.usdExchangeRate || 1550));
+    }
+    const finalPrice = Math.round(costArs * (1 + margin / 100));
 
     return res.json({
       success: true,
@@ -1782,7 +1914,9 @@ app.post('/api/scrape-products', async (req: Request, res: Response) => {
           id: `scraped-fb-${Date.now()}`,
           title: slugData.title,
           description: slugData.description,
-          originalPrice: slugData.estimatedCost,
+          originalPrice: costArs,
+          costCurrency: isUsd ? 'USD' : 'ARS',
+          costInUsd: costUsdVal,
           markupPercentage: margin,
           finalPrice,
           category: slugData.category,
@@ -1815,6 +1949,35 @@ app.post('/api/sync-product-cost', async (req: Request, res: Response) => {
     const margin = Number(markupPercentage) || 40;
     const extracted = await extractLiveCostFromUrl(targetUrl);
     const slugData = extractDetailsFromSlugAndDomain(targetUrl);
+    const oldCost = Number(currentOriginalPrice) || 0;
+
+    // If product is discontinued, not found, or out of stock on supplier web -> mark inStock: false, cost: 0, finalPrice: 0
+    if (extracted.isDiscontinuedOrNotFound || extracted.inStock === false || extracted.cost === 0) {
+      return res.json({
+        success: true,
+        url: targetUrl,
+        cost: 0,
+        originalPrice: 0,
+        costCurrency: costCurrency === 'USD' ? 'USD' : 'ARS',
+        costInUsd: 0,
+        finalPrice: 0,
+        oldCost,
+        diff: -oldCost,
+        priceChanged: oldCost > 0,
+        title: extracted.title || slugData.title,
+        description: extracted.description || slugData.description,
+        category: extracted.category || slugData.category,
+        imageUrl: extracted.imageUrl || slugData.imageUrl,
+        galleryUrls: extracted.galleryUrls || [extracted.imageUrl || slugData.imageUrl],
+        supplierName: extracted.supplierName || slugData.supplierName,
+        inStock: false,
+        stock: 0,
+        isDiscontinuedOrNotFound: true,
+        lastVerifiedStatus: 'out_of_stock',
+        source: extracted.source,
+        syncedAt: new Date().toISOString()
+      });
+    }
 
     let rawCost = extracted.cost;
     if (rawCost <= 0) {
@@ -1828,7 +1991,6 @@ app.post('/api/sync-product-cost', async (req: Request, res: Response) => {
       newCost = Math.round(costUsdVal * Number(usdExchangeRate || 1550));
     }
 
-    const oldCost = Number(currentOriginalPrice) || 0;
     const newFinalPrice = Math.round(newCost * (1 + margin / 100));
     const priceChanged = oldCost > 0 ? oldCost !== newCost : false;
     const diff = oldCost > 0 ? newCost - oldCost : 0;
@@ -1851,6 +2013,8 @@ app.post('/api/sync-product-cost', async (req: Request, res: Response) => {
       galleryUrls: extracted.galleryUrls || [extracted.imageUrl || slugData.imageUrl],
       supplierName: extracted.supplierName || slugData.supplierName,
       inStock: extracted.inStock,
+      isDiscontinuedOrNotFound: false,
+      lastVerifiedStatus: 'in_stock',
       source: extracted.source,
       syncedAt: new Date().toISOString()
     });
@@ -2182,6 +2346,7 @@ app.post('/api/sync-multiple-costs', async (req: Request, res: Response) => {
       priceChanged: boolean;
       diff: number;
       inStock: boolean;
+      isDiscontinuedOrNotFound?: boolean;
       success: boolean;
       error?: string;
     }> = [];
@@ -2203,6 +2368,7 @@ app.post('/api/sync-multiple-costs', async (req: Request, res: Response) => {
           priceChanged: false,
           diff: 0,
           inStock: true,
+          isDiscontinuedOrNotFound: false,
           success: false,
           error: 'No tiene link de proveedor asignado'
         });
@@ -2215,7 +2381,24 @@ app.post('/api/sync-multiple-costs', async (req: Request, res: Response) => {
         const oldCost = Number(item.originalPrice) || 0;
         const extracted = await extractLiveCostFromUrl(item.supplierUrl.trim());
 
-        if (extracted.cost > 0) {
+        // Check if out of stock or discontinued
+        if (extracted.isDiscontinuedOrNotFound || extracted.inStock === false || extracted.cost === 0) {
+          updatedCount++;
+          results.push({
+            id: item.id,
+            title: item.title,
+            supplierUrl: item.supplierUrl,
+            oldCost,
+            newCost: 0,
+            newFinalPrice: 0,
+            priceChanged: oldCost > 0,
+            diff: -oldCost,
+            inStock: false,
+            isDiscontinuedOrNotFound: true,
+            success: true,
+            error: 'Producto agotado o no encontrado en proveedor (P. Venta: $0)'
+          });
+        } else if (extracted.cost > 0) {
           let newCost = extracted.cost;
           if (item.costCurrency === 'USD') {
             newCost = Math.round(extracted.cost * Number(usdExchangeRate || 1550));
@@ -2237,6 +2420,7 @@ app.post('/api/sync-multiple-costs', async (req: Request, res: Response) => {
             priceChanged,
             diff,
             inStock: extracted.inStock,
+            isDiscontinuedOrNotFound: false,
             success: true
           });
         } else {
@@ -2251,6 +2435,7 @@ app.post('/api/sync-multiple-costs', async (req: Request, res: Response) => {
             priceChanged: false,
             diff: 0,
             inStock: true,
+            isDiscontinuedOrNotFound: false,
             success: false,
             error: 'No se pudo leer el precio en el enlace'
           });

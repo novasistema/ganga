@@ -78,24 +78,34 @@ export const Header: React.FC<HeaderProps> = ({
               if (isAdminView) onToggleView();
               setSearchQuery('');
             }}
-            className="flex items-center gap-2.5 text-left focus:outline-hidden group"
+            className="flex items-center gap-2.5 text-left focus:outline-hidden group cursor-pointer"
           >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-blue-600 flex items-center justify-center text-white shadow-md shadow-indigo-200 group-hover:scale-105 transition-transform">
-              <Sparkles className="w-5 h-5 text-amber-300" />
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold text-xl tracking-tight text-gray-900 group-hover:text-indigo-600 transition-colors">
-                  {settings.companyName || 'DropStore'}
-                </span>
-                <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
-                  PRO
-                </span>
-              </div>
-              <p className="text-[11px] text-gray-500 font-medium hidden sm:block">
-                Dropshipping & E-Commerce Centralizado
-              </p>
-            </div>
+            {settings.logoUrl ? (
+              <img
+                src={settings.logoUrl}
+                alt={settings.companyName || 'Nova Import'}
+                className="h-10 sm:h-12 w-auto object-contain max-w-[200px] sm:max-w-[240px] transition-transform group-hover:scale-105"
+              />
+            ) : (
+              <>
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-blue-600 flex items-center justify-center text-white shadow-md shadow-indigo-200 group-hover:scale-105 transition-transform">
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-extrabold text-xl tracking-tight text-gray-900 group-hover:text-indigo-600 transition-colors">
+                      {settings.companyName || 'Nova Import'}
+                    </span>
+                    <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-wider">
+                      PRO
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-medium hidden sm:block">
+                    Tus Socios en el Mercado Global
+                  </p>
+                </div>
+              </>
+            )}
           </button>
         </div>
 
