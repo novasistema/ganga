@@ -10,7 +10,8 @@ import {
   LogIn,
   LogOut,
   X,
-  Package
+  Package,
+  Users
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { useAuth } from '../context/AuthContext';
@@ -34,7 +35,9 @@ export const Header: React.FC<HeaderProps> = ({
     setIsCartOpen,
     searchQuery,
     setSearchQuery,
-    setIsBudgetTrackingOpen
+    setIsBudgetTrackingOpen,
+    setIsResellerPortalOpen,
+    activeReseller
   } = useStore();
   const { isAdmin, logoutAdmin } = useAuth();
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -155,6 +158,23 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="md:hidden">Pedido</span>
             </button>
           )}
+
+          {/* Reseller Sales Portal Trigger */}
+          <button
+            onClick={() => setIsResellerPortalOpen(true)}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs ${
+              activeReseller
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-200 ring-2 ring-emerald-300'
+                : 'text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200/80'
+            }`}
+            title="Portal para que vendedores y revendedores carguen pedidos de clientes"
+          >
+            <Users className={`w-4 h-4 ${activeReseller ? 'text-white' : 'text-teal-600'}`} />
+            <span className="hidden sm:inline">
+              {activeReseller ? `Vendedor: ${activeReseller.name.split(' ')[0]}` : 'Portal Vendedores'}
+            </span>
+            <span className="sm:hidden">{activeReseller ? activeReseller.name.split(' ')[0] : 'Ventas'}</span>
+          </button>
 
           {/* WhatsApp Support button */}
           <a

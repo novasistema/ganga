@@ -11,11 +11,21 @@ import { CheckoutModal } from './components/CheckoutModal';
 import { LoginModal } from './components/LoginModal';
 import { BudgetTrackingModal } from './components/BudgetTrackingModal';
 import { AdminPanel } from './components/AdminPanel';
+import { ResellerPortal } from './components/ResellerPortal';
 import { Footer } from './components/Footer';
 import { MessageCircle, ShoppingBag, Sparkles, FolderTree, ArrowRight } from 'lucide-react';
 
 function StoreApp() {
-  const { products, activeCategory, setActiveCategory, searchQuery, isLoading, settings, categories } = useStore();
+  const {
+    products,
+    activeCategory,
+    setActiveCategory,
+    searchQuery,
+    isLoading,
+    settings,
+    categories,
+    isResellerPortalOpen
+  } = useStore();
   const { isAdmin } = useAuth();
 
   const [isAdminView, setIsAdminView] = useState(false);
@@ -255,6 +265,7 @@ function StoreApp() {
       <CartDrawer />
       <CheckoutModal />
       <BudgetTrackingModal />
+      {isResellerPortalOpen && <ResellerPortal />}
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}

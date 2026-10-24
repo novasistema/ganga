@@ -19,7 +19,8 @@ import {
   StoreCategory,
   CustomerClient,
   SupplierPurchaseOrder,
-  SupplierOrderItem
+  SupplierOrderItem,
+  ResellerUser
 } from '../types';
 import { DEFAULT_SETTINGS, INITIAL_PRODUCTS, DEFAULT_BANNERS, DEFAULT_CATEGORIES } from '../data/initialData';
 import { DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
@@ -107,6 +108,16 @@ interface StoreContextType {
     failed: number;
     results: any[];
   }>;
+  resellers: ResellerUser[];
+  activeReseller: ResellerUser | null;
+  setActiveReseller: (reseller: ResellerUser | null) => void;
+  loginReseller: (username: string, password: string) => Promise<{ success: boolean; error?: string; reseller?: ResellerUser }>;
+  logoutReseller: () => void;
+  addReseller: (resellerData: Omit<ResellerUser, 'id' | 'createdAt'>) => Promise<string>;
+  updateReseller: (id: string, updates: Partial<ResellerUser>) => Promise<void>;
+  deleteReseller: (id: string) => Promise<void>;
+  isResellerPortalOpen: boolean;
+  setIsResellerPortalOpen: (open: boolean) => void;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -146,6 +157,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isBudgetTrackingOpen, setIsBudgetTrackingOpen] = useState(false);
   const [trackingOrderId, setTrackingOrderId] = useState<string>('');
   const [isSuperOfertasOpen, setIsSuperOfertasOpen] = useState(false);
+  const [resellers, setResellers] = useState<ResellerUser[]>([]);
+  const [activeReseller, setActiveReseller] = useState<ResellerUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('nova_reseller_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [isResellerPortalOpen, setIsResellerPortalOpen] = useState(false);
 
   // Sync cart to localStorage
   useEffect(() => {
@@ -286,6 +307,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
 
     return () => unsubSupplierOrders();
+  }, []);
+
+  // 6. Sync Resellers & Sales Reps from Firestore
+  useEffect(() => {
+    const resColRef = collection(db, 'resellers');
+    const q = query(resColRef, orderBy('createdAt', 'desc'));
+    const unsubResellers = onSnapshot(
+      q,
+      (snapshot) => {
+        const list: ResellerUser[] = [];
+        snapshot.forEach((d) => {
+          list.push({ id: d.id, ...d.data() } as ResellerUser);
+        });
+        setResellers(list);
+      },
+      (error) => {
+        console.warn('Resellers onSnapshot error:', error.message);
+      }
+    );
+
+    return () => unsubResellers();
   }, []);
 
   // Function to seed initial catalog to Firestore
@@ -901,6 +943,99 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSupplierOrders((prev) => prev.filter((so) => so.id !== orderId));
   };
 
+  // --- RESELLER / VENDEDOR MANAGEMENT & AUTH ---
+  const addReseller = async (
+    resellerData: Omit<ResellerUser, 'id' | 'createdAt'>
+  ): Promise<string> => {
+    const newId = `reseller-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    const newReseller: ResellerUser = {
+      ...resellerData,
+      id: newId,
+      createdAt: new Date().toISOString(),
+      totalOrdersCount: 0,
+      totalSalesAmount: 0
+    };
+
+    try {
+      await setDoc(doc(db, 'resellers', newId), newReseller);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `resellers/${newId}`);
+    }
+
+    setResellers((prev) => [newReseller, ...prev.filter((r) => r.id !== newId)]);
+    return newId;
+  };
+
+  const updateReseller = async (id: string, updates: Partial<ResellerUser>): Promise<void> => {
+    try {
+      await updateDoc(doc(db, 'resellers', id), updates);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `resellers/${id}`);
+    }
+
+    setResellers((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
+    if (activeReseller && activeReseller.id === id) {
+      const updated = { ...activeReseller, ...updates };
+      setActiveReseller(updated);
+      try {
+        localStorage.setItem('nova_reseller_session', JSON.stringify(updated));
+      } catch {}
+    }
+  };
+
+  const deleteReseller = async (id: string): Promise<void> => {
+    try {
+      await deleteDoc(doc(db, 'resellers', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `resellers/${id}`);
+    }
+
+    setResellers((prev) => prev.filter((r) => r.id !== id));
+    if (activeReseller && activeReseller.id === id) {
+      setActiveReseller(null);
+      try {
+        localStorage.removeItem('nova_reseller_session');
+      } catch {}
+    }
+  };
+
+  const loginReseller = async (
+    username: string,
+    password: string
+  ): Promise<{ success: boolean; error?: string; reseller?: ResellerUser }> => {
+    const cleanUser = username.trim().toLowerCase();
+    const cleanPass = password.trim();
+
+    const found = resellers.find(
+      (r) =>
+        (r.username.toLowerCase() === cleanUser || (r.email && r.email.toLowerCase() === cleanUser)) &&
+        r.password === cleanPass
+    );
+
+    if (!found) {
+      return { success: false, error: 'Usuario o contraseña incorrectos. Consulta con el administrador.' };
+    }
+
+    if (!found.active) {
+      return { success: false, error: 'Tu cuenta de vendedor se encuentra inactiva. Contacta a administración.' };
+    }
+
+    const updatedUser = { ...found, lastLoginAt: new Date().toISOString() };
+    setActiveReseller(updatedUser);
+    try {
+      localStorage.setItem('nova_reseller_session', JSON.stringify(updatedUser));
+      await updateDoc(doc(db, 'resellers', found.id), { lastLoginAt: updatedUser.lastLoginAt });
+    } catch {}
+    return { success: true, reseller: updatedUser };
+  };
+
+  const logoutReseller = () => {
+    setActiveReseller(null);
+    try {
+      localStorage.removeItem('nova_reseller_session');
+    } catch {}
+  };
+
   const generateMercadoPagoLink = async (order: Order) => {
     try {
       const res = await fetch('/api/mercadopago/create-preference', {
@@ -1272,7 +1407,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deleteSupplierOrder,
         syncProductCostFromLink,
         syncAllProductCostsFromLinks,
-        syncUnsyncedProductsFromLinks
+        syncUnsyncedProductsFromLinks,
+        resellers,
+        activeReseller,
+        setActiveReseller,
+        loginReseller,
+        logoutReseller,
+        addReseller,
+        updateReseller,
+        deleteReseller,
+        isResellerPortalOpen,
+        setIsResellerPortalOpen
       }}
     >
       {children}

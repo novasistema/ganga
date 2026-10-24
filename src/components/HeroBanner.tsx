@@ -205,6 +205,10 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onEditBanners }) => {
     ? currentBanner.features
     : defaultPerks;
 
+  // Check if benefit cards are enabled (both globally and per banner)
+  const isBenefitsEnabled = settings.hideBannerFeatures !== true && currentBanner.showFeatures !== false;
+  const hasRightContent = featuredProducts.length > 0 || isBenefitsEnabled;
+
   return (
     <div
       onMouseEnter={() => setIsPaused(true)}
@@ -250,7 +254,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onEditBanners }) => {
       {/* Main Banner Content */}
       <div className="relative px-6 py-10 sm:px-12 sm:py-14 lg:py-16 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
         {/* Left Column: Headlines & Call to Action */}
-        <div className="lg:col-span-7 space-y-5 animate-fade-in">
+        <div className={`${hasRightContent ? 'lg:col-span-7' : 'lg:col-span-12 max-w-4xl'} space-y-5 animate-fade-in`}>
           {/* Badge Tag */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-bold tracking-wide uppercase">
             {currentBanner.badgeIcon === 'zap' ? (

@@ -118,8 +118,34 @@ export interface Order {
   trackingUrl?: string;
   dispatchedAt?: string;
   paymentProofUrl?: string;
+  // Reseller / Vendedor attribution fields
+  isResellerOrder?: boolean;
+  resellerId?: string;
+  resellerName?: string;
+  resellerCommissionPercentage?: number;
+  resellerCommissionAmount?: number;
+  resellerWholesaleTotal?: number;
+  shippingCarrier?: string;
+  customerProvince?: string;
+  customerPostalCode?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface ResellerUser {
+  id: string;
+  name: string;
+  username: string; // Login username or email
+  password: string; // Password assigned by admin
+  phone?: string;
+  email?: string;
+  commissionPercentage: number; // Default % profit/margin (e.g. 30)
+  active: boolean;
+  createdAt: string;
+  notes?: string;
+  totalOrdersCount?: number;
+  totalSalesAmount?: number;
+  lastLoginAt?: string;
 }
 
 export interface CustomerClient {
@@ -206,6 +232,7 @@ export interface HeroBannerItem {
   backgroundGradient?: string;
   imageUrl?: string;
   features?: HeroBannerFeature[];
+  showFeatures?: boolean; // Permite activar o desactivar las tarjetas de beneficios del banner
   featuredProductIds?: string[]; // IDs de productos del inventario vinculados como destacados
   active: boolean;
   sortOrder?: number;
@@ -252,7 +279,26 @@ export interface CompanySettings {
   mercadoPagoPublicKey?: string;
   mercadoPagoAliasCvu?: string;
   mercadoPagoNotificationWebhookUrl?: string;
+  priceLists?: ResellerPriceList[];
+  resellers?: ResellerUser[];
+  hideBannerFeatures?: boolean; // Permite desactivar globalmente las tarjetas de beneficios en todos los banners
   updatedAt?: string;
+}
+
+export interface ResellerPriceList {
+  id: string;
+  name: string;
+  resellerName?: string;
+  wholesaleMarkupPercentage: number;  // Margen mayorista propio (ej 25%)
+  resellerMarkupPercentage: number;   // Margen que le suma el vendedor (ej 35%)
+  hideOriginalCost: boolean;          // Ocultar costo base del proveedor
+  showResellerProfit: boolean;        // Mostrar ganancia neta del revendedor en $
+  showSuggestedPvp: boolean;          // Mostrar PVP sugerido
+  categoryFilter?: string;            // 'Todas' o categoría específica
+  selectedProductIds?: string[];      // Lista de IDs seleccionados o vacío para todos
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CartItem {

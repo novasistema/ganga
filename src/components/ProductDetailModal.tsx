@@ -10,7 +10,8 @@ import {
   Zap,
   Check,
   Plus,
-  Minus
+  Minus,
+  AlertCircle
 } from 'lucide-react';
 import { resolveImageUrl } from '../utils/imageUrl';
 
@@ -289,9 +290,6 @@ export const ProductDetailModal: React.FC = () => {
               );
             })()}
           </div>
-        </div>
-      </div>
-    </div>
         </div>
       </div>
     </div>

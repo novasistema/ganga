@@ -40,18 +40,22 @@ import {
   FolderTree,
   ChevronDown,
   Users,
-  Zap
+  Zap,
+  ShieldCheck
 } from 'lucide-react';
 import { SuperOfertasModule } from './SuperOfertasModule';
 import { BannerManager } from './BannerManager';
 import { CategoryManager } from './CategoryManager';
 import { SupplierOrderManager } from './SupplierOrderManager';
 import { CustomerManager } from './CustomerManager';
+import { ProductFlyerGenerator } from './ProductFlyerGenerator';
+import { PriceListManager } from './PriceListManager';
+import { ResellerManager } from './ResellerManager';
 import { resolveImageUrl, DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
 interface AdminPanelProps {
   onClose: () => void;
-  initialTab?: 'super_ofertas' | 'scraper' | 'inventory' | 'categories' | 'banners' | 'orders' | 'supplier_orders' | 'clients' | 'settings';
+  initialTab?: 'super_ofertas' | 'scraper' | 'inventory' | 'categories' | 'banners' | 'orders' | 'supplier_orders' | 'clients' | 'settings' | 'flyers_export' | 'price_lists' | 'resellers';
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) => {
@@ -81,12 +85,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     syncUnsyncedProductsFromLinks,
     categories,
     ensureCategoryExists,
-    banners
+    banners,
+    resellers
   } = useStore();
 
   const { adminEmail, changeAdminPassword, changeAdminEmail } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'supplier_orders' | 'clients' | 'settings' | 'super_ofertas' | 'categories' | 'banners'>(initialTab || 'super_ofertas');
+  const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'supplier_orders' | 'clients' | 'settings' | 'super_ofertas' | 'categories' | 'banners' | 'flyers_export' | 'price_lists' | 'resellers'>(initialTab || 'super_ofertas');
+  const [flyerExportProductId, setFlyerExportProductId] = useState<string | undefined>(undefined);
   const [editingImageItemId, setEditingImageItemId] = useState<string | null>(null);
   const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'company' | 'payments'>('password');
 
@@ -1167,6 +1173,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
           </button>
 
           <button
+            onClick={() => setActiveTab('flyers_export')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'flyers_export'
+                ? 'bg-gradient-to-r from-fuchsia-600 to-indigo-600 text-white shadow-md shadow-fuchsia-600/30 ring-1 ring-fuchsia-400'
+                : 'text-fuchsia-300 bg-fuchsia-950/30 border border-fuchsia-800/40 hover:bg-fuchsia-900/50 hover:text-white'
+            }`}
+          >
+            <Camera className="w-4 h-4 text-fuchsia-400" />
+            <span>📸 Placas Publicitarias</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('price_lists')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'price_lists'
+                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/30 ring-1 ring-emerald-400'
+                : 'text-emerald-300 bg-emerald-950/30 border border-emerald-800/40 hover:bg-emerald-900/50 hover:text-white'
+            }`}
+          >
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span>📋 Listas Revendedores</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('categories')}
             className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
               activeTab === 'categories'
@@ -1224,6 +1254,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
           >
             <Users className="w-4 h-4 text-emerald-400" />
             <span>👥 Clientes ({clients.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('resellers')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'resellers'
+                ? 'bg-gradient-to-r from-teal-600 to-indigo-600 text-white shadow-md shadow-teal-600/30 ring-1 ring-teal-400'
+                : 'text-teal-300 bg-teal-950/30 border border-teal-800/40 hover:bg-teal-900/50 hover:text-white'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-teal-300" />
+            <span>💼 Vendedores ({resellers.length})</span>
           </button>
 
           <button
@@ -2115,7 +2157,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedInventoryIds.length > 0) {
+                          setFlyerExportProductId(selectedInventoryIds[0]);
+                        }
+                        setActiveTab('flyers_export');
+                      }}
+                      className="px-3 py-1.5 bg-fuchsia-600/30 hover:bg-fuchsia-600/50 text-fuchsia-200 border border-fuchsia-500/40 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                      title="Exportar imágenes/placas promocionales de los productos seleccionados"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-fuchsia-300" />
+                      <span>📸 Exportar Placas ({selectedInventoryIds.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('price_lists')}
+                      className="px-3 py-1.5 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-500/40 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                      title="Crear lista de precios para revendedores con ganancias"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-emerald-300" />
+                      <span>📋 Lista Revendedores</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setSelectedInventoryIds([])}
@@ -2196,6 +2261,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                     <span className="px-1.5 py-0.5 bg-emerald-950/60 border border-emerald-400/40 text-[10px] font-black rounded-md">
                       {products.filter((p) => p.supplierUrl && p.supplierUrl.trim().startsWith('http')).length}
                     </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('flyers_export')}
+                    className="px-3.5 py-2 bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-fuchsia-600/20"
+                    title="Exportar placas en imagen de productos con foto, datos y precios para WhatsApp y redes"
+                  >
+                    <Camera className="w-4 h-4 text-fuchsia-200" />
+                    <span>Placas Publicitarias</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('price_lists')}
+                    className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-600/20"
+                    title="Crear listas de precios con margen de ganancia para revendedores"
+                  >
+                    <FileText className="w-4 h-4 text-emerald-200" />
+                    <span>Listas Revendedores</span>
                   </button>
                   <button
                     onClick={() => setIsNewProductModalOpen(true)}
@@ -2520,6 +2603,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                                     <RefreshCw className={`w-3.5 h-3.5 ${syncingSingleId === p.id ? 'animate-spin text-emerald-300' : ''}`} />
                                   </button>
                                 )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFlyerExportProductId(p.id);
+                                    setActiveTab('flyers_export');
+                                  }}
+                                  className="p-1.5 text-slate-400 hover:text-fuchsia-400 hover:bg-fuchsia-950/60 rounded-lg transition-colors cursor-pointer"
+                                  title="Crear Placa Publicitaria con foto, precio y logo"
+                                >
+                                  <Camera className="w-3.5 h-3.5" />
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => setEditingProduct(p)}
@@ -3597,6 +3691,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                               <span className="text-[10px] text-slate-400 truncate block max-w-xs">
                                 {o.customerPhone} • {o.items.length} ítems
                               </span>
+                              {o.isResellerOrder && (
+                                <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md bg-teal-500/20 text-teal-300 border border-teal-500/30 text-[10px] font-black">
+                                  <ShieldCheck className="w-3 h-3" />
+                                  <span>Vendedor: {o.resellerName || 'Revendedor'}</span>
+                                  {o.resellerCommissionAmount && (
+                                    <span className="text-emerald-400 font-mono">
+                                      (+{formatCurrency(o.resellerCommissionAmount)})
+                                    </span>
+                                  )}
+                                </span>
+                              )}
                             </td>
 
                             <td className="py-3 px-3">
@@ -4257,6 +4362,36 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
         {activeTab === 'banners' && (
           <div className="space-y-6 animate-fade-in">
             <BannerManager />
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB 8: EXPORTACIÓN DE PLACAS PUBLICITARIAS                  */}
+        {/* ============================================================ */}
+        {activeTab === 'flyers_export' && (
+          <div className="space-y-6 animate-fade-in">
+            <ProductFlyerGenerator
+              initialProductId={flyerExportProductId}
+              onClose={() => setActiveTab('inventory')}
+            />
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB 9: LISTAS DE PRECIOS & MÁRGENES PARA REVENDEDORES       */}
+        {/* ============================================================ */}
+        {activeTab === 'price_lists' && (
+          <div className="space-y-6 animate-fade-in">
+            <PriceListManager onClose={() => setActiveTab('inventory')} />
+          </div>
+        )}
+
+        {/* ============================================================ */}
+        {/* TAB 10: GESTIÓN DE VENDEDORES & REVENDEDORES (PORTAL)        */}
+        {/* ============================================================ */}
+        {activeTab === 'resellers' && (
+          <div className="space-y-6 animate-fade-in">
+            <ResellerManager />
           </div>
         )}
       </main>
