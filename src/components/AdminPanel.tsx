@@ -41,8 +41,13 @@ import {
   ChevronDown,
   Users,
   Zap,
-  ShieldCheck
+  ShieldCheck,
+  Bell,
+  Send,
+  Radio,
+  Volume2
 } from 'lucide-react';
+import { NotificationType } from '../types';
 import { SuperOfertasModule } from './SuperOfertasModule';
 import { BannerManager } from './BannerManager';
 import { CategoryManager } from './CategoryManager';
@@ -55,7 +60,7 @@ import { resolveImageUrl, DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl'
 
 interface AdminPanelProps {
   onClose: () => void;
-  initialTab?: 'super_ofertas' | 'scraper' | 'inventory' | 'categories' | 'banners' | 'orders' | 'supplier_orders' | 'clients' | 'settings' | 'flyers_export' | 'price_lists' | 'resellers';
+  initialTab?: 'super_ofertas' | 'scraper' | 'inventory' | 'categories' | 'banners' | 'orders' | 'supplier_orders' | 'clients' | 'settings' | 'flyers_export' | 'price_lists' | 'resellers' | 'notifications';
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) => {
@@ -86,15 +91,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
     categories,
     ensureCategoryExists,
     banners,
-    resellers
+    resellers,
+    notifications,
+    triggerPushNotification,
+    clearNotifications
   } = useStore();
 
   const { adminEmail, changeAdminPassword, changeAdminEmail } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'supplier_orders' | 'clients' | 'settings' | 'super_ofertas' | 'categories' | 'banners' | 'flyers_export' | 'price_lists' | 'resellers'>(initialTab || 'super_ofertas');
+  const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'supplier_orders' | 'clients' | 'settings' | 'super_ofertas' | 'categories' | 'banners' | 'flyers_export' | 'price_lists' | 'resellers' | 'notifications'>(initialTab || 'super_ofertas');
   const [flyerExportProductId, setFlyerExportProductId] = useState<string | undefined>(undefined);
   const [editingImageItemId, setEditingImageItemId] = useState<string | null>(null);
-  const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'company' | 'payments'>('password');
+  const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'company' | 'payments' | 'notifications'>('password');
+
+  // --- BROADCAST PUSH NOTIFICATIONS STATE ---
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastType, setBroadcastType] = useState<NotificationType>('promo');
+  const [broadcastImageUrl, setBroadcastImageUrl] = useState('');
+  const [broadcastActionUrl, setBroadcastActionUrl] = useState('');
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [broadcastSuccess, setBroadcastSuccess] = useState<string | null>(null);
 
   // --- PASSWORD MANAGEMENT STATE ---
   const [passwordForm, setPasswordForm] = useState({
@@ -1266,6 +1283,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
           >
             <ShieldCheck className="w-4 h-4 text-teal-300" />
             <span>💼 Vendedores ({resellers.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('notifications')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'notifications'
+                ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-600/30 ring-1 ring-violet-400'
+                : 'text-violet-300 bg-violet-950/30 border border-violet-800/40 hover:bg-violet-900/50 hover:text-white'
+            }`}
+          >
+            <Bell className="w-4 h-4 text-violet-300" />
+            <span>🔔 Notificaciones Push ({notifications.length})</span>
           </button>
 
           <button
@@ -3869,6 +3898,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
               >
                 <CreditCard className="w-4 h-4 text-sky-400" />
                 <span>💳 Cuentas Bancarias & Mercado Pago</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsSubTab('notifications')}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  settingsSubTab === 'notifications'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                <Bell className="w-4 h-4 text-violet-400" />
+                <span>🔔 Notificaciones Push</span>
               </button>
 
               <button

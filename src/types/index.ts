@@ -139,7 +139,10 @@ export interface ResellerUser {
   password: string; // Password assigned by admin
   phone?: string;
   email?: string;
-  commissionPercentage: number; // Default % profit/margin (e.g. 30)
+  zone?: string; // Zona asignada (ej: Interior, CABA, Gran Bs As, Ruta 2)
+  assignedPriceListId?: string; // ID de la lista de precios asignada al viajante
+  assignedPriceListName?: string; // Nombre cacheado de la lista asignada
+  commissionPercentage: number; // % ganancia/margen default (ej 25)
   active: boolean;
   createdAt: string;
   notes?: string;
@@ -288,20 +291,49 @@ export interface CompanySettings {
 export interface ResellerPriceList {
   id: string;
   name: string;
+  description?: string;
   resellerName?: string;
-  wholesaleMarkupPercentage: number;  // Margen mayorista propio (ej 25%)
-  resellerMarkupPercentage: number;   // Margen que le suma el vendedor (ej 35%)
+  markupPercentage: number;           // % de ganancia / recargo ARRIBA del precio de venta de los productos de la tienda (ej: 20%)
+  calculationBase?: 'store_price' | 'wholesale_cost'; // Por defecto 'store_price' (arriba del precio de venta online)
+  wholesaleMarkupPercentage?: number; // Retrocompatibilidad
+  resellerMarkupPercentage?: number;  // Retrocompatibilidad
   hideOriginalCost: boolean;          // Ocultar costo base del proveedor
   showResellerProfit: boolean;        // Mostrar ganancia neta del revendedor en $
   showSuggestedPvp: boolean;          // Mostrar PVP sugerido
   categoryFilter?: string;            // 'Todas' o categoría específica
   selectedProductIds?: string[];      // Lista de IDs seleccionados o vacío para todos
   notes?: string;
+  active?: boolean;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 export interface CartItem {
   product: Product;
   quantity: number;
 }
+
+export type NotificationType = 'order_status' | 'new_product' | 'promo' | 'system';
+
+export interface PushNotification {
+  id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  orderId?: string;
+  productId?: string;
+  newStatus?: Order['orderStatus'];
+  imageUrl?: string;
+  actionUrl?: string;
+}
+
+export interface NotificationSettings {
+  enabled: boolean;          // Master toggle for notifications
+  orderUpdates: boolean;     // Alert on order status changes
+  newProducts: boolean;      // Alert on new products added to inventory
+  promos: boolean;           // Alert on promotions and flash sales
+  soundEnabled: boolean;     // Play sound on notification
+}
+

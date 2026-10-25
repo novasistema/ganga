@@ -30,6 +30,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Building,
+  Share2,
   X
 } from 'lucide-react';
 import { resolveImageUrl } from '../utils/imageUrl';
@@ -76,7 +77,10 @@ export const ResellerPortal: React.FC<ResellerPortalProps> = ({ onClose }) => {
     settings,
     updateReseller,
     isResellerPortalOpen,
-    setIsResellerPortalOpen
+    setIsResellerPortalOpen,
+    activePriceList,
+    priceLists,
+    calculateProductPriceForViajante
   } = useStore();
 
   const handleClose = () => {
@@ -90,6 +94,7 @@ export const ResellerPortal: React.FC<ResellerPortalProps> = ({ onClose }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Portal tabs
   const [activeTab, setActiveTab] = useState<'new_order' | 'my_orders' | 'catalog'>('new_order');
@@ -121,22 +126,25 @@ export const ResellerPortal: React.FC<ResellerPortalProps> = ({ onClose }) => {
     return `${settings.currencySymbol || '$'} ${val.toLocaleString('es-AR')}`;
   };
 
-  // Reseller commission calculation
+  // Viajante markup calculation: Base is Store Final Price + List Markup %
   const getProductCalculations = (p: Product) => {
-    // 1. Base wholesale cost (wholesale price that the distributor charges)
-    const baseCost = p.originalPrice || Math.round(p.finalPrice / 1.4);
-    const wholesaleMargin = 25; // default wholesale margin
-    const wholesalePrice = Math.round(baseCost * (1 + wholesaleMargin / 100));
+    // 1. Base price from online store
+    const storePrice = p.finalPrice;
 
-    // 2. Reseller profit margin
-    const commissionPercent = activeReseller?.commissionPercentage || 30;
-    const salePriceToCustomer = Math.round(wholesalePrice * (1 + commissionPercent / 100));
-    const profitPerUnit = salePriceToCustomer - wholesalePrice;
+    // 2. Markup % from assigned list or reseller commission
+    const listMarkup = activePriceList?.markupPercentage ?? activePriceList?.resellerMarkupPercentage;
+    const commissionPercent = typeof listMarkup === 'number'
+      ? listMarkup
+      : (activeReseller?.commissionPercentage || 20);
+
+    // 3. Price to sell to the customer (Store Price + % markup)
+    const salePriceToCustomer = Math.round(storePrice * (1 + commissionPercent / 100));
+    const profitPerUnit = salePriceToCustomer - storePrice;
 
     return {
-      wholesalePrice,
-      salePriceToCustomer,
-      profitPerUnit,
+      wholesalePrice: storePrice, // Lo que rinde a la distribuidora
+      salePriceToCustomer,        // Lo que el viajante le cobra al cliente
+      profitPerUnit,              // Ganancia del viajante
       commissionPercent
     };
   };
@@ -267,7 +275,9 @@ export const ResellerPortal: React.FC<ResellerPortalProps> = ({ onClose }) => {
         isResellerOrder: true,
         resellerId: activeReseller?.id,
         resellerName: activeReseller?.name,
-        resellerCommissionPercentage: activeReseller?.commissionPercentage || 30,
+        assignedPriceListId: activePriceList?.id || activeReseller?.assignedPriceListId || '',
+        assignedPriceListName: activePriceList?.name || activeReseller?.assignedPriceListName || 'Lista General',
+        resellerCommissionPercentage: activePriceList?.markupPercentage ?? activeReseller?.commissionPercentage ?? 20,
         resellerCommissionAmount: resellerProfitTotal,
         resellerWholesaleTotal: wholesaleTotal
       };
@@ -469,22 +479,45 @@ export const ResellerPortal: React.FC<ResellerPortalProps> = ({ onClose }) => {
             <div className="flex flex-wrap items-center gap-2 mb-1.5">
               <span className="bg-emerald-500/20 text-emerald-300 font-black text-[10px] px-2.5 py-0.5 rounded-md border border-emerald-500/30 flex items-center gap-1">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>SESIÓN INICIADA: VENDEDOR OFICIAL</span>
+                <span>MODO VIAJANTE ACTIVO</span>
+              </span>
+              <span className="bg-sky-500/20 text-sky-300 font-black text-[10px] px-2.5 py-0.5 rounded-md border border-sky-500/30">
+                📋 Lista: {activePriceList?.name || activeReseller.assignedPriceListName || 'Lista Estándar'}
               </span>
               <span className="bg-indigo-500/20 text-indigo-300 font-black text-[10px] px-2.5 py-0.5 rounded-md border border-indigo-500/30">
-                📈 Tu Ganancia: +{activeReseller.commissionPercentage}% por venta
+                📈 Tu Ganancia: +{activePriceList?.markupPercentage ?? activeReseller.commissionPercentage}% s/ precio tienda
               </span>
+              {activeReseller.zone && (
+                <span className="bg-purple-500/20 text-purple-300 font-black text-[10px] px-2.5 py-0.5 rounded-md border border-purple-500/30">
+                  🗺️ Zona: {activeReseller.zone}
+                </span>
+              )}
             </div>
 
             <h2 className="text-xl sm:text-2xl font-black text-white">
               ¡Hola, {activeReseller.name}!
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Carga pedidos con los datos de tus clientes. El depósito prepara el paquete y te liquida tu ganancia.
+              Tus precios de venta al cliente ya tienen cargada tu ganancia del +{activePriceList?.markupPercentage ?? activeReseller.commissionPercentage}% sobre el precio de tienda online. Carga pedidos en la calle y despachamos directo a tu cliente.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                const link = `${window.location.origin}/?viajante=${encodeURIComponent(activeReseller.username)}`;
+                navigator.clipboard.writeText(link);
+                setCopiedLink(true);
+                setTimeout(() => setCopiedLink(false), 3000);
+              }}
+              className="px-3.5 py-2 bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 text-xs font-bold rounded-xl border border-emerald-500/40 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Copiar link directo a la tienda con los precios de tu lista para compartir a tus clientes"
+            >
+              <Share2 className="w-4 h-4 text-emerald-400" />
+              <span>{copiedLink ? '✓ ¡Link Copiado!' : 'Copiar Mi Link de Venta'}</span>
+            </button>
+
             <button
               type="button"
               onClick={logoutReseller}
@@ -500,7 +533,7 @@ export const ResellerPortal: React.FC<ResellerPortalProps> = ({ onClose }) => {
               className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold rounded-xl border border-slate-800 transition-colors cursor-pointer flex items-center gap-1.5"
             >
               <X className="w-4 h-4" />
-              <span>Cerrar Portal</span>
+              <span>Cerrar</span>
             </button>
           </div>
         </div>

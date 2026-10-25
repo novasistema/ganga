@@ -1,4 +1,59 @@
-import { Product, CompanySettings, HeroBannerItem, StoreCategory } from '../types';
+import { Product, CompanySettings, HeroBannerItem, StoreCategory, ResellerPriceList } from '../types';
+
+export const DEFAULT_PRICE_LISTS: ResellerPriceList[] = [
+  {
+    id: 'list-viajante-estandar',
+    name: 'Lista Viajantes Estándar (+20% s/ Tienda)',
+    description: 'Lista general para vendedores y viajantes. Aplica un 20% de recargo de ganancia sobre el precio de venta de la tienda online.',
+    markupPercentage: 20,
+    calculationBase: 'store_price',
+    hideOriginalCost: true,
+    showResellerProfit: true,
+    showSuggestedPvp: true,
+    categoryFilter: 'Todas',
+    active: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'list-viajante-interior',
+    name: 'Lista Viajantes Interior (+30% s/ Tienda)',
+    description: 'Para viajantes que cubren rutas de larga distancia, provincias o pueblos del interior.',
+    markupPercentage: 30,
+    calculationBase: 'store_price',
+    hideOriginalCost: true,
+    showResellerProfit: true,
+    showSuggestedPvp: true,
+    categoryFilter: 'Todas',
+    active: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'list-comercios-kioscos',
+    name: 'Lista Comercios & Kioscos (+15% s/ Tienda)',
+    description: 'Para venta por volumen a locales barriales, kioscos y polirrubros con margen competitivo.',
+    markupPercentage: 15,
+    calculationBase: 'store_price',
+    hideOriginalCost: true,
+    showResellerProfit: true,
+    showSuggestedPvp: true,
+    categoryFilter: 'Todas',
+    active: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'list-credito-cuenta-corriente',
+    name: 'Lista Venta a Plazo / Cta. Cte. (+35% s/ Tienda)',
+    description: 'Para ventas con financiación o entregas con pago a plazo.',
+    markupPercentage: 35,
+    calculationBase: 'store_price',
+    hideOriginalCost: true,
+    showResellerProfit: true,
+    showSuggestedPvp: true,
+    categoryFilter: 'Todas',
+    active: true,
+    createdAt: new Date().toISOString()
+  }
+];
 
 export const DEFAULT_BANNERS: HeroBannerItem[] = [
   {
@@ -91,6 +146,7 @@ export const DEFAULT_SETTINGS: CompanySettings = {
   announcementText: '🔥 OFERTAS DE TEMPORADA: Envío GRATIS en compras superiores a $35.000 • 3 Cuotas sin interés • 10% OFF por Transferencia',
   banners: DEFAULT_BANNERS,
   categories: DEFAULT_CATEGORIES,
+  priceLists: DEFAULT_PRICE_LISTS,
   mercadoPagoAccessToken: '',
   mercadoPagoPublicKey: '',
   mercadoPagoAliasCvu: 'DISTRIBUIDORA.BRUZZONE.MP',

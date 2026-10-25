@@ -37,18 +37,30 @@ interface PriceListManagerProps {
 }
 
 export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) => {
-  const { products, settings, saveSettings } = useStore();
+  const {
+    products,
+    settings,
+    saveSettings,
+    priceLists,
+    addPriceList,
+    updatePriceList,
+    deletePriceList,
+    resellers
+  } = useStore();
+
+  const [selectedListId, setSelectedListId] = useState<string>(priceLists[0]?.id || '');
+  const [calculationBase, setCalculationBase] = useState<'store_price' | 'wholesale_cost'>('store_price');
 
   // Price List Name & Reseller Details
-  const [listTitle, setListTitle] = useState('Lista de Precios Mayorista para Revendedores');
-  const [resellerName, setResellerName] = useState('Revendedores Oficiales');
-  const [listNotes, setListNotes] = useState('Precios válidos para pedidos por mayor. Envíos y stock garantizado.');
+  const [listTitle, setListTitle] = useState(priceLists[0]?.name || 'Lista Viajantes Estándar (+20% s/ Tienda)');
+  const [resellerName, setResellerName] = useState(priceLists[0]?.resellerName || 'Vendedores & Viajantes');
+  const [listNotes, setListNotes] = useState(priceLists[0]?.description || 'Precios con ganancia para viajantes sobre el valor de tienda online.');
 
   // Calculation Margins
-  // 1. Wholesale Markup (My markup over supplier cost, default 25%)
+  // 1. Wholesale Markup (optional / historical markup over supplier cost)
   const [wholesaleMarkup, setWholesaleMarkup] = useState<number>(25);
-  // 2. Reseller's own Markup (The markup added by the seller to resell to end customers, default 35%)
-  const [resellerMarkup, setResellerMarkup] = useState<number>(35);
+  // 2. Reseller's own Markup (% de ganancia/recargo ARRIBA del precio de tienda)
+  const [resellerMarkup, setResellerMarkup] = useState<number>(priceLists[0]?.markupPercentage ?? 20);
 
   // Filters & Product Selection
   const [searchTerm, setSearchTerm] = useState('');
@@ -70,6 +82,24 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [savePresetMessage, setSavePresetMessage] = useState<string | null>(null);
+
+  // Switch list selection
+  const handleSelectList = (pl: ResellerPriceList) => {
+    setSelectedListId(pl.id);
+    setListTitle(pl.name);
+    setResellerMarkup(pl.markupPercentage ?? pl.resellerMarkupPercentage ?? 20);
+    setCalculationBase(pl.calculationBase || 'store_price');
+    setListNotes(pl.description || pl.notes || '');
+    if (pl.categoryFilter) setCategoryFilter(pl.categoryFilter);
+  };
+
+  const handleStartNewList = () => {
+    setSelectedListId('new');
+    setListTitle('Nueva Lista Viajantes (+25% s/ Tienda)');
+    setResellerMarkup(25);
+    setCalculationBase('store_price');
+    setListNotes('Lista personalizada para viajantes con recargo comercial sobre el precio de venta de la tienda.');
+  };
 
   // Image Export options (with photos!) - default 0 means TOTAL DE LA LISTA (all items)
   const [imageExportLayout, setImageExportLayout] = useState<'table' | 'cards'>('table');
@@ -98,30 +128,43 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
     return matchesSearch && matchesCat && matchesStock;
   });
 
-  // Calculate prices for a product
+  // Calculate prices for a product based on chosen calculation base
   const getProductCalculations = (p: Product) => {
-    // 1. Base Cost in ARS
-    const baseCost = p.originalPrice || Math.round(p.finalPrice / 1.4);
+    if (calculationBase === 'store_price') {
+      // 1. Base Cost in ARS
+      const baseCost = p.originalPrice || Math.round(p.finalPrice / 1.4);
+      // 2. Store Final Price (The price direct online customers pay)
+      const storePrice = p.finalPrice;
+      // 3. Viajante Price to Customer (Store Price + % Ganancia Viajante)
+      const suggestedPvp = Math.round(storePrice * (1 + resellerMarkup / 100));
+      // 4. Net Profit for the Viajante
+      const resellerProfitAmount = suggestedPvp - storePrice;
+      // 5. Store Gross Profit
+      const myProfitAmount = storePrice - baseCost;
 
-    // 2. Reseller Wholesale Price (What the reseller pays to you)
-    const resellerCost = Math.round(baseCost * (1 + wholesaleMarkup / 100));
+      return {
+        baseCost,
+        resellerCost: storePrice, // Lo que le corresponde a la tienda
+        suggestedPvp,             // Lo que el viajante le cobra al cliente
+        resellerProfitAmount,     // Ganancia del viajante
+        myProfitAmount
+      };
+    } else {
+      // Wholesale from supplier cost mode
+      const baseCost = p.originalPrice || Math.round(p.finalPrice / 1.4);
+      const resellerCost = Math.round(baseCost * (1 + wholesaleMarkup / 100));
+      const suggestedPvp = Math.round(resellerCost * (1 + resellerMarkup / 100));
+      const resellerProfitAmount = suggestedPvp - resellerCost;
+      const myProfitAmount = resellerCost - baseCost;
 
-    // 3. Suggested Retail Price (PVP - what the reseller charges the final customer)
-    const suggestedPvp = Math.round(resellerCost * (1 + resellerMarkup / 100));
-
-    // 4. Reseller Net Profit ($ ARS per sale)
-    const resellerProfitAmount = suggestedPvp - resellerCost;
-
-    // 5. My Net Wholesale Profit ($ ARS)
-    const myProfitAmount = resellerCost - baseCost;
-
-    return {
-      baseCost,
-      resellerCost,
-      suggestedPvp,
-      resellerProfitAmount,
-      myProfitAmount
-    };
+      return {
+        baseCost,
+        resellerCost,
+        suggestedPvp,
+        resellerProfitAmount,
+        myProfitAmount
+      };
+    }
   };
 
   // Copy formatted WhatsApp Text to Clipboard
@@ -810,10 +853,12 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
   const handleSavePreset = async () => {
     setIsSavingPreset(true);
     try {
-      const newPreset: ResellerPriceList = {
-        id: `preset-${Date.now()}`,
-        name: listTitle.trim() || 'Lista Revendedores',
+      const isNew = selectedListId === 'new' || !selectedListId;
+      const listData = {
+        name: listTitle.trim() || 'Lista Viajantes',
         resellerName: resellerName.trim(),
+        markupPercentage: resellerMarkup,
+        calculationBase,
         wholesaleMarkupPercentage: wholesaleMarkup,
         resellerMarkupPercentage: resellerMarkup,
         hideOriginalCost: hideSupplierCost,
@@ -821,27 +866,37 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
         showSuggestedPvp,
         categoryFilter,
         selectedProductIds,
+        description: listNotes,
         notes: listNotes,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+        active: true
       };
 
-      const existingPresets = settings.priceLists || [];
-      const updated = [newPreset, ...existingPresets.filter((p) => p.name !== newPreset.name)];
-
-      await saveSettings({
-        ...settings,
-        priceLists: updated
-      });
-
-      setSavePresetMessage(`¡Lista guardada como "${newPreset.name}" con éxito!`);
+      if (isNew) {
+        const createdId = await addPriceList(listData);
+        setSelectedListId(createdId);
+        setSavePresetMessage(`¡Nueva lista "${listData.name}" creada y guardada con éxito!`);
+      } else {
+        await updatePriceList(selectedListId, listData);
+        setSavePresetMessage(`¡Lista "${listData.name}" actualizada con éxito en Firebase!`);
+      }
       setTimeout(() => setSavePresetMessage(null), 4000);
     } catch (err: any) {
-      alert('Error al guardar preset: ' + err.message);
+      alert('Error al guardar lista: ' + err.message);
     } finally {
       setIsSavingPreset(false);
     }
   };
+
+  const sampleProduct = products[0] || {
+    id: 'sample',
+    title: 'Producto de Ejemplo',
+    finalPrice: 10000,
+    originalPrice: 7000,
+    category: 'Tecnología',
+    imageUrl: '',
+    inStock: true
+  };
+  const sampleCalc = getProductCalculations(sampleProduct as Product);
 
   return (
     <div className="space-y-6">
@@ -850,38 +905,214 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-black px-2.5 py-0.5 rounded-md border border-emerald-500/30">
-              VENTAS & REVENDEDORES (DISTRIBUCIÓN)
+              SISTEMA DE LISTAS DE PRECIOS & VIAJANTES
             </span>
             <h2 className="text-xl font-black text-white">
-              Creador de Listas de Precios para Revendedores
+              Listas de Precios con Ganancia para Viajantes
             </h2>
           </div>
           <p className="text-xs text-slate-400 max-w-2xl">
-            Calcula automáticamente tus precios mayoristas, agrega el % de ganancia que le sugerís a tus vendedores y exporta la lista en imagen HD para WhatsApp, texto formateado, PDF o Excel.
+            Crea distintas listas de precios con % de ganancia arriba del precio de venta de tu tienda online y asígnalas a cada viajante para que vendan en la calle con su propio margen.
           </p>
         </div>
 
-        {onClose && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+            type="button"
+            onClick={handleStartNewList}
+            className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-black rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-lg shadow-emerald-600/20"
           >
-            Volver al Inventario
+            <Plus className="w-4 h-4" />
+            <span>Nueva Lista</span>
           </button>
-        )}
+
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+            >
+              Volver al Inventario
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Control Panel: Margins & Reseller Settings */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Margin 1: Wholesale Markup */}
-        <div className="bg-slate-950 p-4 rounded-3xl border border-indigo-900/60 shadow-md space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-black text-indigo-300 uppercase tracking-wide flex items-center gap-1.5">
-              <Percent className="w-4 h-4 text-indigo-400" />
-              1. Tu Margen Mayorista
-            </span>
-            <span className="text-[10px] text-slate-500">Sobre tu costo</span>
+      {/* PRICE LISTS SELECTOR BAR */}
+      <div className="bg-slate-950 p-4 rounded-3xl border border-slate-800 shadow-xl space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <span className="text-xs font-black text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
+            <Layers className="w-4 h-4 text-emerald-400" />
+            Listas de Precios Activas ({priceLists.length}):
+          </span>
+          <span className="text-[11px] text-slate-400">
+            Haz clic en una lista para editar su porcentaje y productos o asignarla a viajantes
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          {priceLists.map((pl) => {
+            const isSelected = selectedListId === pl.id;
+            const assignedCount = resellers.filter((r) => r.assignedPriceListId === pl.id).length;
+
+            return (
+              <button
+                key={pl.id}
+                type="button"
+                onClick={() => handleSelectList(pl)}
+                className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer border ${
+                  isSelected
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-400 shadow-lg shadow-emerald-600/30 ring-2 ring-emerald-400/30'
+                    : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <span>{pl.name}</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                    isSelected ? 'bg-black/30 text-emerald-200' : 'bg-emerald-950 text-emerald-400 border border-emerald-800/40'
+                  }`}
+                >
+                  +{pl.markupPercentage ?? pl.resellerMarkupPercentage ?? 20}%
+                </span>
+                {assignedCount > 0 && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                      isSelected ? 'bg-black/40 text-sky-200' : 'bg-sky-950 text-sky-400 border border-sky-800/40'
+                    }`}
+                    title={`${assignedCount} viajante(s) asignado(s) a esta lista`}
+                  >
+                    👤 {assignedCount} {assignedCount === 1 ? 'viajante' : 'viajantes'}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={handleStartNewList}
+            className={`px-3 py-2 rounded-2xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer border ${
+              selectedListId === 'new'
+                ? 'bg-indigo-600 text-white border-indigo-400 shadow-md'
+                : 'bg-slate-900/60 text-slate-400 hover:text-white border-dashed border-slate-700 hover:border-indigo-500'
+            }`}
+          >
+            <Plus className="w-3.5 h-3.5 text-indigo-400" />
+            <span>+ Crear Otra Lista</span>
+          </button>
+        </div>
+      </div>
+
+      {/* LIVE PROFIT SIMULATOR & CALCULATION BASE SELECTOR */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Calculation Base Selector */}
+        <div className="bg-slate-950 p-5 rounded-3xl border border-indigo-900/50 shadow-md space-y-3">
+          <div className="flex items-center gap-2 text-indigo-400 text-xs font-black uppercase">
+            <Percent className="w-4 h-4" />
+            <span>Base de Cálculo del Margen</span>
           </div>
+
+          <div className="space-y-2">
+            <label
+              onClick={() => setCalculationBase('store_price')}
+              className={`p-3 rounded-2xl border flex items-start gap-3 cursor-pointer transition-all ${
+                calculationBase === 'store_price'
+                  ? 'bg-indigo-950/60 border-indigo-500 text-white shadow-md'
+                  : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700'
+              }`}
+            >
+              <input
+                type="radio"
+                name="calcBase"
+                checked={calculationBase === 'store_price'}
+                onChange={() => setCalculationBase('store_price')}
+                className="mt-0.5 text-indigo-600"
+              />
+              <div className="text-xs">
+                <span className="font-black text-white block">
+                  🌟 Arriba del Precio de Tienda Online (Recomendado)
+                </span>
+                <span className="text-[11px] text-slate-400 mt-0.5 block leading-relaxed">
+                  Toma el precio final de venta de tu tienda y le suma el recargo pactado que será la ganancia para tu viajante.
+                </span>
+              </div>
+            </label>
+
+            <label
+              onClick={() => setCalculationBase('wholesale_cost')}
+              className={`p-3 rounded-2xl border flex items-start gap-3 cursor-pointer transition-all ${
+                calculationBase === 'wholesale_cost'
+                  ? 'bg-indigo-950/60 border-indigo-500 text-white shadow-md'
+                  : 'bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700'
+              }`}
+            >
+              <input
+                type="radio"
+                name="calcBase"
+                checked={calculationBase === 'wholesale_cost'}
+                onChange={() => setCalculationBase('wholesale_cost')}
+                className="mt-0.5 text-indigo-600"
+              />
+              <div className="text-xs">
+                <span className="font-black text-white block">
+                  Sobre el Costo del Proveedor / Mayorista Puro
+                </span>
+                <span className="text-[11px] text-slate-400 mt-0.5 block leading-relaxed">
+                  Calcula sobre el costo base de importación agregando tu margen y luego el margen de reventa.
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* Live Simulator Card */}
+        <div className="lg:col-span-2 bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/70 p-5 rounded-3xl border border-emerald-900/50 shadow-md space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-emerald-400 text-xs font-black uppercase">
+              <Sparkles className="w-4 h-4 text-amber-300" />
+              <span>Simulador de Ganancia en Tiempo Real (Ejemplo con Producto Real)</span>
+            </div>
+            <span className="text-[10px] text-emerald-300 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800/40 font-mono font-bold">
+              +{resellerMarkup}% Recargo
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <div className="bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block">
+                1. Precio Venta Tienda Online
+              </span>
+              <span className="font-mono text-lg font-black text-white block">
+                {formatCurrency(sampleCalc.resellerCost)}
+              </span>
+              <span className="text-[10px] text-slate-500 block">Lo que paga un cliente en la web</span>
+            </div>
+
+            <div className="bg-slate-900/90 p-3.5 rounded-2xl border border-emerald-800/50 space-y-1">
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wide block">
+                2. Precio que Cobra el Viajante
+              </span>
+              <span className="font-mono text-xl font-black text-emerald-300 block">
+                {formatCurrency(sampleCalc.suggestedPvp)}
+              </span>
+              <span className="text-[10px] text-emerald-400/80 block font-semibold">
+                Precio con el +{resellerMarkup}% incluido
+              </span>
+            </div>
+
+            <div className="bg-emerald-950/50 p-3.5 rounded-2xl border border-emerald-500/40 space-y-1 shadow-inner">
+              <span className="text-[10px] font-black text-emerald-300 uppercase tracking-wide block">
+                3. Ganancia Neta para el Viajante
+              </span>
+              <span className="font-mono text-xl font-black text-emerald-400 block">
+                +{formatCurrency(sampleCalc.resellerProfitAmount)}
+              </span>
+              <span className="text-[10px] text-emerald-200 block font-medium">
+                Por cada unidad que venda en la calle
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
 
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-slate-900 border border-indigo-700/60 rounded-xl px-3 py-2 flex-1">

@@ -12,6 +12,8 @@ import { LoginModal } from './components/LoginModal';
 import { BudgetTrackingModal } from './components/BudgetTrackingModal';
 import { AdminPanel } from './components/AdminPanel';
 import { ResellerPortal } from './components/ResellerPortal';
+import { NotificationCenterModal } from './components/NotificationCenterModal';
+import { NotificationToast } from './components/NotificationToast';
 import { Footer } from './components/Footer';
 import { MessageCircle, ShoppingBag, Sparkles, FolderTree, ArrowRight } from 'lucide-react';
 
@@ -266,6 +268,8 @@ function StoreApp() {
       <CheckoutModal />
       <BudgetTrackingModal />
       {isResellerPortalOpen && <ResellerPortal />}
+      <NotificationCenterModal />
+      <NotificationToast />
       <LoginModal
         isOpen={isLoginModalOpen}
         onClose={() => setIsLoginModalOpen(false)}

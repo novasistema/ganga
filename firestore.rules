@@ -42,5 +42,10 @@ service cloud.firestore {
     match /resellers/{resellerId} {
       allow read, write: if true;
     }
+
+    // Push & in-app notifications
+    match /notifications/{notificationId} {
+      allow read, write: if true;
+    }
   }
 }

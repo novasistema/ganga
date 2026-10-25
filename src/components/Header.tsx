@@ -11,7 +11,8 @@ import {
   LogOut,
   X,
   Package,
-  Users
+  Users,
+  Bell
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { useAuth } from '../context/AuthContext';
@@ -37,7 +38,11 @@ export const Header: React.FC<HeaderProps> = ({
     setSearchQuery,
     setIsBudgetTrackingOpen,
     setIsResellerPortalOpen,
-    activeReseller
+    activeReseller,
+    activePriceList,
+    logoutReseller,
+    unreadNotificationsCount,
+    setIsNotificationCenterOpen
   } = useStore();
   const { isAdmin, logoutAdmin } = useAuth();
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -67,6 +72,50 @@ export const Header: React.FC<HeaderProps> = ({
                 <ShieldCheck className="w-3.5 h-3.5 text-blue-300" />
                 Compra Protegida
               </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active Viajante Banner */}
+      {activeReseller && (
+        <div className="bg-gradient-to-r from-emerald-950 via-teal-900 to-slate-950 text-white text-xs py-2 px-4 sm:px-8 xl:px-12 border-b border-emerald-700/50 shadow-md animate-fade-in">
+          <div className="max-w-[1760px] w-full mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="px-2 py-0.5 rounded-md bg-emerald-500 text-slate-950 font-black text-[10px] uppercase tracking-wide">
+                💼 Modo Viajante
+              </span>
+              <span className="font-extrabold text-white">
+                {activeReseller.name}
+              </span>
+              <span className="text-emerald-300 font-medium">
+                • Lista: <strong>{activePriceList?.name || activeReseller.assignedPriceListName || 'Lista Estándar'}</strong> (+{activePriceList?.markupPercentage ?? activeReseller.commissionPercentage}% ganancia)
+              </span>
+              {activeReseller.zone && (
+                <span className="text-emerald-400/90 text-[11px] font-semibold">
+                  (Zona: {activeReseller.zone})
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsResellerPortalOpen(true)}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-[11px] rounded-lg transition-colors cursor-pointer flex items-center gap-1 shadow-xs"
+              >
+                <ShoppingBag className="w-3.5 h-3.5" />
+                <span>Cargar Pedido en Portal</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={logoutReseller}
+                className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white font-semibold text-[11px] rounded-lg transition-colors cursor-pointer"
+                title="Cerrar modo viajante y ver tienda normal"
+              >
+                Salir del Modo Viajante
+              </button>
             </div>
           </div>
         </div>
@@ -220,6 +269,21 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="sm:hidden">CRM</span>
             </button>
           )}
+
+          {/* Push Notification Center Trigger */}
+          <button
+            onClick={() => setIsNotificationCenterOpen(true)}
+            className="relative p-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200/90 rounded-xl transition-all active:scale-95 cursor-pointer flex items-center justify-center border border-gray-200/80"
+            aria-label="Abrir centro de notificaciones push"
+            title={`Notificaciones push (${unreadNotificationsCount} sin leer)`}
+          >
+            <Bell className="w-4 h-4 text-gray-700" />
+            {unreadNotificationsCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 bg-indigo-600 text-white text-[10px] font-black w-4.5 h-4.5 rounded-full flex items-center justify-center ring-2 ring-white animate-pulse">
+                {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+              </span>
+            )}
+          </button>
 
           {/* Cart Trigger */}
           {!isAdminView && (

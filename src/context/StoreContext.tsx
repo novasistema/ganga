@@ -20,10 +20,20 @@ import {
   CustomerClient,
   SupplierPurchaseOrder,
   SupplierOrderItem,
-  ResellerUser
+  ResellerUser,
+  ResellerPriceList,
+  PushNotification,
+  NotificationSettings
 } from '../types';
-import { DEFAULT_SETTINGS, INITIAL_PRODUCTS, DEFAULT_BANNERS, DEFAULT_CATEGORIES } from '../data/initialData';
+import { DEFAULT_SETTINGS, INITIAL_PRODUCTS, DEFAULT_BANNERS, DEFAULT_CATEGORIES, DEFAULT_PRICE_LISTS } from '../data/initialData';
 import { DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
+import {
+  playNotificationChime,
+  sendNativePushNotification,
+  getBrowserNotificationPermission,
+  requestPushNotificationPermission,
+  ORDER_STATUS_LABELS
+} from '../utils/notificationService';
 
 interface StoreContextType {
   products: Product[];
@@ -118,6 +128,34 @@ interface StoreContextType {
   deleteReseller: (id: string) => Promise<void>;
   isResellerPortalOpen: boolean;
   setIsResellerPortalOpen: (open: boolean) => void;
+  // Price Lists & Viajantes System
+  priceLists: ResellerPriceList[];
+  activePriceList: ResellerPriceList | null;
+  setActivePriceList: (list: ResellerPriceList | null) => void;
+  addPriceList: (list: Omit<ResellerPriceList, 'id' | 'createdAt'>) => Promise<string>;
+  updatePriceList: (id: string, updates: Partial<ResellerPriceList>) => Promise<void>;
+  deletePriceList: (id: string) => Promise<void>;
+  calculateProductPriceForViajante: (product: Product, customList?: ResellerPriceList | null) => {
+    storePrice: number;
+    viajantePrice: number;
+    profitPerUnit: number;
+    markupPercentage: number;
+  };
+  // Push & In-App Notification System
+  notifications: PushNotification[];
+  notificationSettings: NotificationSettings;
+  unreadNotificationsCount: number;
+  browserPermission: NotificationPermission | 'unsupported';
+  requestPermission: () => Promise<NotificationPermission | 'unsupported'>;
+  updateNotificationSettings: (settings: Partial<NotificationSettings>) => void;
+  markNotificationAsRead: (id: string) => Promise<void>;
+  markAllNotificationsAsRead: () => Promise<void>;
+  clearNotifications: () => Promise<void>;
+  isNotificationCenterOpen: boolean;
+  setIsNotificationCenterOpen: (open: boolean) => void;
+  triggerPushNotification: (notif: Omit<PushNotification, 'id' | 'timestamp' | 'read'>) => Promise<string>;
+  activeToastNotification: PushNotification | null;
+  dismissToastNotification: () => void;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -167,6 +205,58 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   });
   const [isResellerPortalOpen, setIsResellerPortalOpen] = useState(false);
+  const [manualPriceList, setManualPriceList] = useState<ResellerPriceList | null>(null);
+
+  // Push & In-App Notifications State
+  const [notifications, setNotifications] = useState<PushNotification[]>(() => {
+    try {
+      const cached = localStorage.getItem('nova_notifications');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    // Initial welcome notification
+    return [
+      {
+        id: 'notif-welcome',
+        type: 'system',
+        title: '🔔 ¡Bienvenido a Nova Import PRO!',
+        message: 'Ahora puedes activar las notificaciones push para recibir cambios en tus pedidos y nuevos ingresos en inventario.',
+        timestamp: new Date().toISOString(),
+        read: false
+      }
+    ];
+  });
+
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => {
+    try {
+      const cached = localStorage.getItem('nova_notification_settings');
+      return cached
+        ? JSON.parse(cached)
+        : {
+            enabled: true,
+            orderUpdates: true,
+            newProducts: true,
+            promos: true,
+            soundEnabled: true
+          };
+    } catch {
+      return {
+        enabled: true,
+        orderUpdates: true,
+        newProducts: true,
+        promos: true,
+        soundEnabled: true
+      };
+    }
+  });
+
+  const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
+  const [activeToastNotification, setActiveToastNotification] = useState<PushNotification | null>(null);
+  const [browserPermission, setBrowserPermission] = useState<NotificationPermission | 'unsupported'>(() => {
+    return getBrowserNotificationPermission();
+  });
 
   // Sync cart to localStorage
   useEffect(() => {
@@ -330,6 +420,32 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => unsubResellers();
   }, []);
 
+  // 7. Sync Notifications from Firestore
+  useEffect(() => {
+    const notifsColRef = collection(db, 'notifications');
+    const q = query(notifsColRef, orderBy('timestamp', 'desc'));
+    const unsubNotifs = onSnapshot(
+      q,
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const list: PushNotification[] = [];
+          snapshot.forEach((d) => {
+            list.push({ id: d.id, ...d.data() } as PushNotification);
+          });
+          setNotifications(list);
+          try {
+            localStorage.setItem('nova_notifications', JSON.stringify(list));
+          } catch {}
+        }
+      },
+      (error) => {
+        console.warn('Notifications onSnapshot error:', error.message);
+      }
+    );
+
+    return () => unsubNotifs();
+  }, []);
+
   // Function to seed initial catalog to Firestore
   const seedInitialProducts = async () => {
     try {
@@ -402,13 +518,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       await setDoc(doc(db, 'products', newId), fullProduct);
       setProducts((prev) => [fullProduct, ...prev]);
-      return newId;
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `products/${newId}`);
       // Fallback
       setProducts((prev) => [fullProduct, ...prev]);
-      return newId;
     }
+
+    // Trigger push notification for new product
+    await triggerPushNotification({
+      type: 'new_product',
+      title: `✨ ¡Nuevo ingreso: ${fullProduct.title}!`,
+      message: `Ya disponible en el catálogo a $ ${fullProduct.finalPrice.toLocaleString('es-AR')} (${fullProduct.category}). ¡Stock listo para entrega!`,
+      productId: newId,
+      imageUrl: fullProduct.imageUrl
+    });
+
+    return newId;
   };
 
   const addMultipleProducts = async (productsList: Product[]): Promise<number> => {
@@ -455,6 +580,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           // ignore
         }
         return updated;
+      });
+
+      // Trigger push notification for bulk new arrivals
+      await triggerPushNotification({
+        type: 'new_product',
+        title: `🚀 ¡${itemsSaved.length} Nuevos Productos en Catálogo!`,
+        message: `Acabamos de incorporar ${itemsSaved.length} artículos a precios mayoristas y con stock verificado. ¡Descúbrelos ya!`,
+        productId: itemsSaved[0].id,
+        imageUrl: itemsSaved[0].imageUrl
       });
     }
 
@@ -1031,10 +1165,235 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const logoutReseller = () => {
     setActiveReseller(null);
+    setManualPriceList(null);
     try {
       localStorage.removeItem('nova_reseller_session');
     } catch {}
   };
+
+  // =========================================================================
+  // PRICE LISTS & VIAJANTES MARGINS SYSTEM
+  // =========================================================================
+  const priceLists: ResellerPriceList[] = (settings.priceLists && settings.priceLists.length > 0)
+    ? settings.priceLists
+    : DEFAULT_PRICE_LISTS;
+
+  const activePriceList: ResellerPriceList | null = manualPriceList || (
+    activeReseller?.assignedPriceListId
+      ? priceLists.find((pl) => pl.id === activeReseller.assignedPriceListId) || null
+      : null
+  );
+
+  const setActivePriceList = (list: ResellerPriceList | null) => {
+    setManualPriceList(list);
+  };
+
+  // URL Parameter Detection: ?viajante=username or ?lista=listId
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const viajanteParam = params.get('viajante') || params.get('vendedor');
+      if (viajanteParam && resellers.length > 0) {
+        const match = resellers.find(
+          (r) => r.username.toLowerCase() === viajanteParam.toLowerCase() || r.id === viajanteParam
+        );
+        if (match && (!activeReseller || activeReseller.id !== match.id)) {
+          setActiveReseller(match);
+        }
+      }
+      const listParam = params.get('lista') || params.get('price_list');
+      if (listParam && priceLists.length > 0) {
+        const matchPl = priceLists.find((pl) => pl.id === listParam || pl.name.toLowerCase().includes(listParam.toLowerCase()));
+        if (matchPl) {
+          setManualPriceList(matchPl);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [resellers, priceLists]);
+
+  const calculateProductPriceForViajante = (product: Product, customList?: ResellerPriceList | null) => {
+    const listToUse = customList !== undefined ? customList : activePriceList;
+    const storePrice = product.finalPrice;
+
+    let markup = 20; // default 20%
+    if (listToUse && typeof listToUse.markupPercentage === 'number') {
+      markup = listToUse.markupPercentage;
+    } else if (listToUse && typeof listToUse.resellerMarkupPercentage === 'number') {
+      markup = listToUse.resellerMarkupPercentage;
+    } else if (activeReseller && typeof activeReseller.commissionPercentage === 'number') {
+      markup = activeReseller.commissionPercentage;
+    }
+
+    const viajantePrice = Math.round(storePrice * (1 + markup / 100));
+    const profitPerUnit = viajantePrice - storePrice;
+
+    return {
+      storePrice,
+      viajantePrice,
+      profitPerUnit,
+      markupPercentage: markup
+    };
+  };
+
+  const addPriceList = async (listData: Omit<ResellerPriceList, 'id' | 'createdAt'>): Promise<string> => {
+    const newId = `list-${Date.now()}`;
+    const newList: ResellerPriceList = {
+      ...listData,
+      id: newId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    const currentLists = settings.priceLists && settings.priceLists.length > 0 ? settings.priceLists : DEFAULT_PRICE_LISTS;
+    const updated = [newList, ...currentLists];
+    await saveSettings({
+      ...settings,
+      priceLists: updated
+    });
+    return newId;
+  };
+
+  const updatePriceList = async (id: string, updates: Partial<ResellerPriceList>): Promise<void> => {
+    const currentLists = settings.priceLists && settings.priceLists.length > 0 ? settings.priceLists : DEFAULT_PRICE_LISTS;
+    const updated = currentLists.map((pl) => (pl.id === id ? { ...pl, ...updates, updatedAt: new Date().toISOString() } : pl));
+    await saveSettings({
+      ...settings,
+      priceLists: updated
+    });
+  };
+
+  const deletePriceList = async (id: string): Promise<void> => {
+    const currentLists = settings.priceLists && settings.priceLists.length > 0 ? settings.priceLists : DEFAULT_PRICE_LISTS;
+    const updated = currentLists.filter((pl) => pl.id !== id);
+    await saveSettings({
+      ...settings,
+      priceLists: updated
+    });
+  };
+
+  // =========================================================================
+  // PUSH & IN-APP NOTIFICATION METHODS
+  // =========================================================================
+  const triggerPushNotification = async (
+    notifData: Omit<PushNotification, 'id' | 'timestamp' | 'read'>
+  ): Promise<string> => {
+    const notifId = `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const fullNotif: PushNotification = {
+      ...notifData,
+      id: notifId,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+
+    // 1. Play soft synthesized chime if sound is enabled
+    if (notificationSettings.enabled && notificationSettings.soundEnabled) {
+      playNotificationChime();
+    }
+
+    // 2. Trigger native push notification if enabled by category
+    if (notificationSettings.enabled) {
+      const isCategoryEnabled =
+        (fullNotif.type === 'order_status' && notificationSettings.orderUpdates) ||
+        (fullNotif.type === 'new_product' && notificationSettings.newProducts) ||
+        (fullNotif.type === 'promo' && notificationSettings.promos) ||
+        fullNotif.type === 'system';
+
+      if (isCategoryEnabled) {
+        sendNativePushNotification({
+          title: fullNotif.title,
+          body: fullNotif.message,
+          icon: fullNotif.imageUrl || settings.logoUrl || '/assets/aistudio/LOGO_55e42e2f.jpg',
+          tag: fullNotif.orderId || fullNotif.productId || notifId,
+          onClick: () => {
+            if (fullNotif.orderId) {
+              setTrackingOrderId(fullNotif.orderId);
+              setIsBudgetTrackingOpen(true);
+            }
+          }
+        });
+      }
+    }
+
+    // 3. Show in-app banner toast
+    setActiveToastNotification(fullNotif);
+    setTimeout(() => {
+      setActiveToastNotification((current) => (current?.id === notifId ? null : current));
+    }, 6000);
+
+    // 4. Save to Firestore and local state
+    try {
+      await setDoc(doc(db, 'notifications', notifId), fullNotif);
+    } catch (err: any) {
+      console.warn('Notice saving notification to Firestore:', err.message);
+    }
+
+    setNotifications((prev) => [fullNotif, ...prev.filter((n) => n.id !== notifId)]);
+    return notifId;
+  };
+
+  const markNotificationAsRead = async (id: string): Promise<void> => {
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+    );
+    try {
+      await updateDoc(doc(db, 'notifications', id), { read: true });
+    } catch {}
+  };
+
+  const markAllNotificationsAsRead = async (): Promise<void> => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    for (const n of notifications) {
+      if (!n.read) {
+        try {
+          await updateDoc(doc(db, 'notifications', n.id), { read: true });
+        } catch {}
+      }
+    }
+  };
+
+  const clearNotifications = async (): Promise<void> => {
+    const ids = notifications.map((n) => n.id);
+    setNotifications([]);
+    try {
+      localStorage.setItem('nova_notifications', JSON.stringify([]));
+    } catch {}
+    for (const id of ids) {
+      try {
+        await deleteDoc(doc(db, 'notifications', id));
+      } catch {}
+    }
+  };
+
+  const updateNotificationSettings = (newSettings: Partial<NotificationSettings>) => {
+    setNotificationSettings((prev) => {
+      const updated = { ...prev, ...newSettings };
+      try {
+        localStorage.setItem('nova_notification_settings', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
+  const requestPermission = async (): Promise<NotificationPermission | 'unsupported'> => {
+    const res = await requestPushNotificationPermission();
+    setBrowserPermission(res);
+    if (res === 'granted') {
+      playNotificationChime();
+      sendNativePushNotification({
+        title: '🎉 ¡Notificaciones Push Activadas!',
+        body: 'Te avisaremos cuando tu pedido cambie de estado o lleguen novedades al inventario.',
+        icon: settings.logoUrl || '/assets/aistudio/LOGO_55e42e2f.jpg'
+      });
+    }
+    return res;
+  };
+
+  const dismissToastNotification = () => {
+    setActiveToastNotification(null);
+  };
+
+  const unreadNotificationsCount = notifications.filter((n) => !n.read).length;
 
   const generateMercadoPagoLink = async (order: Order) => {
     try {
@@ -1147,6 +1506,25 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setOrders((prev) =>
       prev.map((o) => (o.id === orderId ? { ...o, orderStatus: status } : o))
     );
+
+    // Trigger Push Notification for order status change
+    const targetOrder = orders.find((o) => o.id === orderId);
+    const statusMeta = ORDER_STATUS_LABELS[status] || {
+      label: status,
+      emoji: '📦',
+      desc: 'El estado del pedido ha sido actualizado.'
+    };
+
+    await triggerPushNotification({
+      type: 'order_status',
+      title: `${statusMeta.emoji} Pedido #${orderId}: ${statusMeta.label}`,
+      message: targetOrder?.customerName
+        ? `Hola ${targetOrder.customerName}, tu pedido ha cambiado a: ${statusMeta.desc}`
+        : `Tu pedido #${orderId} cambió a: ${statusMeta.label}. ${statusMeta.desc}`,
+      orderId: orderId,
+      newStatus: status,
+      imageUrl: targetOrder?.items?.[0]?.imageUrl || undefined
+    });
   };
 
   const updatePaymentStatus = async (orderId: string, status: Order['paymentStatus']) => {
@@ -1417,7 +1795,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         updateReseller,
         deleteReseller,
         isResellerPortalOpen,
-        setIsResellerPortalOpen
+        setIsResellerPortalOpen,
+        // Price Lists & Viajantes
+        priceLists,
+        activePriceList,
+        setActivePriceList,
+        addPriceList,
+        updatePriceList,
+        deletePriceList,
+        calculateProductPriceForViajante,
+        // Notifications
+        notifications,
+        notificationSettings,
+        isNotificationCenterOpen,
+        unreadNotificationsCount,
+        browserPermission,
+        requestPermission,
+        updateNotificationSettings,
+        markNotificationAsRead,
+        markAllNotificationsAsRead,
+        clearNotifications,
+        setIsNotificationCenterOpen,
+        triggerPushNotification,
+        activeToastNotification,
+        dismissToastNotification
       }}
     >
       {children}

@@ -19,11 +19,26 @@ import {
   ExternalLink,
   Search,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  MapPin,
+  Sparkles,
+  Share2,
+  FileText,
+  Layers
 } from 'lucide-react';
 
 export const ResellerManager: React.FC = () => {
-  const { resellers, addReseller, updateReseller, deleteReseller, orders, settings } = useStore();
+  const {
+    resellers,
+    addReseller,
+    updateReseller,
+    deleteReseller,
+    orders,
+    settings,
+    priceLists,
+    setActiveReseller,
+    setIsResellerPortalOpen
+  } = useStore();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -37,7 +52,9 @@ export const ResellerManager: React.FC = () => {
   const [formPassword, setFormPassword] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formEmail, setFormEmail] = useState('');
-  const [formCommission, setFormCommission] = useState<number>(30);
+  const [formCommission, setFormCommission] = useState<number>(20);
+  const [formAssignedPriceListId, setFormAssignedPriceListId] = useState<string>('');
+  const [formZone, setFormZone] = useState('');
   const [formNotes, setFormNotes] = useState('');
   const [formActive, setFormActive] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
@@ -48,7 +65,10 @@ export const ResellerManager: React.FC = () => {
     setFormPassword('');
     setFormPhone('');
     setFormEmail('');
-    setFormCommission(30);
+    const defaultList = priceLists[0];
+    setFormAssignedPriceListId(defaultList?.id || '');
+    setFormCommission(defaultList?.markupPercentage ?? 20);
+    setFormZone('');
     setFormNotes('');
     setFormActive(true);
     setFormError(null);
@@ -68,6 +88,8 @@ export const ResellerManager: React.FC = () => {
     setFormPhone(r.phone || '');
     setFormEmail(r.email || '');
     setFormCommission(r.commissionPercentage);
+    setFormAssignedPriceListId(r.assignedPriceListId || priceLists[0]?.id || '');
+    setFormZone(r.zone || '');
     setFormNotes(r.notes || '');
     setFormActive(r.active);
     setFormError(null);
@@ -99,6 +121,8 @@ export const ResellerManager: React.FC = () => {
       return;
     }
 
+    const selectedPl = priceLists.find((pl) => pl.id === formAssignedPriceListId);
+
     try {
       if (editingReseller) {
         await updateReseller(editingReseller.id, {
@@ -107,7 +131,10 @@ export const ResellerManager: React.FC = () => {
           password: formPassword.trim(),
           phone: formPhone.trim(),
           email: formEmail.trim(),
-          commissionPercentage: Number(formCommission) || 30,
+          commissionPercentage: Number(formCommission) || (selectedPl?.markupPercentage ?? 20),
+          assignedPriceListId: formAssignedPriceListId || selectedPl?.id || '',
+          assignedPriceListName: selectedPl?.name || 'Lista Estándar',
+          zone: formZone.trim(),
           notes: formNotes.trim(),
           active: formActive
         });
@@ -118,7 +145,10 @@ export const ResellerManager: React.FC = () => {
           password: formPassword.trim(),
           phone: formPhone.trim(),
           email: formEmail.trim(),
-          commissionPercentage: Number(formCommission) || 30,
+          commissionPercentage: Number(formCommission) || (selectedPl?.markupPercentage ?? 20),
+          assignedPriceListId: formAssignedPriceListId || selectedPl?.id || '',
+          assignedPriceListName: selectedPl?.name || 'Lista Estándar',
+          zone: formZone.trim(),
           notes: formNotes.trim(),
           active: formActive
         });
@@ -297,9 +327,23 @@ export const ResellerManager: React.FC = () => {
                     </div>
 
                     <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
-                      <span className="text-slate-400 font-bold text-[11px]">Margen Ganancia Vendedor:</span>
+                      <span className="text-slate-400 font-bold text-[11px]">📋 Lista Asignada:</span>
+                      <span className="font-bold text-sky-400 text-[11px] truncate max-w-[170px]" title={r.assignedPriceListName || 'Lista Estándar'}>
+                        {r.assignedPriceListName || 'Lista Estándar'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400 font-bold text-[11px]">Margen s/ Tienda:</span>
                       <span className="font-black text-emerald-400">+{r.commissionPercentage}%</span>
                     </div>
+
+                    {r.zone && (
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-400 font-bold">🗺️ Zona:</span>
+                        <span className="text-slate-300 font-medium truncate max-w-[170px]">{r.zone}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Contact Info & Stats */}
@@ -334,47 +378,79 @@ export const ResellerManager: React.FC = () => {
                 </div>
 
                 {/* Card Actions */}
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleCopyAccessMessage(r)}
-                    className="flex-1 px-3 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                    title="Copiar mensaje listo para enviar al revendedor por WhatsApp con sus datos de ingreso"
-                  >
-                    {copiedResellerId === r.id ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>¡Copiado para WhatsApp!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span>Enviar Accesos</span>
-                      </>
-                    )}
-                  </button>
+                <div className="space-y-2 pt-3 border-t border-slate-800/80">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyAccessMessage(r)}
+                      className="flex-1 px-3 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                      title="Copiar mensaje con accesos y lista de precios para WhatsApp"
+                    >
+                      {copiedResellerId === r.id ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>¡Copiado para WhatsApp!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5" />
+                          <span>Enviar Accesos</span>
+                        </>
+                      )}
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => handleOpenEditModal(r)}
-                    className="p-2 bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-slate-800 rounded-xl transition-colors cursor-pointer"
-                    title="Editar datos y contraseña"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveReseller(r);
+                        setIsResellerPortalOpen(true);
+                      }}
+                      className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-indigo-600/20"
+                      title="Abrir el portal del viajante para probar cómo ve los precios y cargar un pedido de prueba"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Abrir Portal</span>
+                    </button>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (confirm(`¿Eliminar al vendedor "${r.name}" del sistema?`)) {
-                        deleteReseller(r.id);
-                      }
-                    }}
-                    className="p-2 bg-slate-900 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-800 rounded-xl transition-colors cursor-pointer"
-                    title="Eliminar vendedor"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-900">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const link = `${window.location.origin}/?viajante=${encodeURIComponent(r.username)}`;
+                        navigator.clipboard.writeText(link);
+                        setCopiedResellerId(`link-${r.id}`);
+                        setTimeout(() => setCopiedResellerId(null), 3000);
+                      }}
+                      className="flex-1 py-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-sky-300 border border-slate-800 rounded-lg text-[10px] font-bold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                      title="Copiar link directo de la tienda con los precios de este viajante"
+                    >
+                      <Share2 className="w-3 h-3 text-sky-400" />
+                      <span>{copiedResellerId === `link-${r.id}` ? '✓ ¡Link de Venta Copiado!' : 'Copiar Link de Venta'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditModal(r)}
+                      className="p-1.5 bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-slate-800 rounded-lg transition-colors cursor-pointer"
+                      title="Editar viajante y lista asignada"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`¿Eliminar al viajante "${r.name}" del sistema?`)) {
+                          deleteReseller(r.id);
+                        }
+                      }}
+                      className="p-1.5 bg-slate-900 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-800 rounded-lg transition-colors cursor-pointer"
+                      title="Eliminar vendedor"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -460,10 +536,44 @@ export const ResellerManager: React.FC = () => {
                 </div>
               </div>
 
+              {/* ASSIGNED PRICE LIST SELECTOR */}
+              <div className="bg-slate-950 p-3.5 rounded-2xl border border-indigo-900/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-indigo-300 block">
+                    📋 Lista de Precios Asignada al Viajante *
+                  </label>
+                  <span className="text-[10px] text-indigo-400 font-bold bg-indigo-950/80 px-2 py-0.5 rounded-full border border-indigo-800/40">
+                    Calcula ganancia s/ precio tienda
+                  </span>
+                </div>
+
+                <select
+                  value={formAssignedPriceListId}
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    setFormAssignedPriceListId(selectedId);
+                    const pl = priceLists.find((p) => p.id === selectedId);
+                    if (pl && typeof pl.markupPercentage === 'number') {
+                      setFormCommission(pl.markupPercentage);
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-indigo-700/60 rounded-xl text-xs text-white focus:outline-hidden focus:border-indigo-500 font-bold cursor-pointer"
+                >
+                  {priceLists.map((pl) => (
+                    <option key={pl.id} value={pl.id}>
+                      {pl.name} (+{pl.markupPercentage}% sobre precio tienda)
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  Cuando este viajante ingrese al sistema o comparta su link, los productos tendrán el precio con este recargo de ganancia pactado.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">
-                    Margen de Ganancia del Vendedor (%) *
+                    % Ganancia del Viajante (s/ Tienda) *
                   </label>
                   <div className="flex items-center bg-slate-950 border border-slate-800 rounded-xl px-3 py-2">
                     <span className="text-xs text-slate-400 font-bold mr-1">+</span>
@@ -477,9 +587,25 @@ export const ResellerManager: React.FC = () => {
                     />
                     <span className="text-xs text-slate-400 font-bold ml-1">%</span>
                   </div>
-                  <span className="text-[10px] text-slate-500 mt-0.5 block">Ganancia que suma sobre su costo</span>
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">Heredado de la lista o custom</span>
                 </div>
 
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    🗺️ Zona / Región Asignada
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Interior de Córdoba, Gran Bs As, CABA..."
+                    value={formZone}
+                    onChange={(e) => setFormZone(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-hidden focus:border-indigo-500"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-0.5 block">Área donde opera el viajante</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-bold text-slate-300 block mb-1">
                     Teléfono / WhatsApp
@@ -492,19 +618,19 @@ export const ResellerManager: React.FC = () => {
                     className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-hidden focus:border-indigo-500"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="text-xs font-bold text-slate-300 block mb-1">
-                  Notas Internas (Opcional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ej: Zona Norte, distribuidor de herramientas..."
-                  value={formNotes}
-                  onChange={(e) => setFormNotes(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-hidden focus:border-indigo-500"
-                />
+                <div>
+                  <label className="text-xs font-bold text-slate-300 block mb-1">
+                    Notas Internas (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ej: Kioscos, ferreterías, venta en ruta..."
+                    value={formNotes}
+                    onChange={(e) => setFormNotes(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-hidden focus:border-indigo-500"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-2 pt-1">

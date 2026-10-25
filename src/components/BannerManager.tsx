@@ -24,7 +24,8 @@ import {
   Palette,
   Star,
   Search,
-  X
+  X,
+  EyeOff
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
 import { HeroBannerItem, HeroBannerFeature, Product } from '../types';
@@ -84,7 +85,7 @@ const FEATURE_ICONS: { id: HeroBannerFeature['icon']; label: string }[] = [
 ];
 
 export const BannerManager: React.FC = () => {
-  const { banners, saveBanners, categories, products } = useStore();
+  const { banners, saveBanners, categories, products, settings, saveSettings } = useStore();
 
   const [editingBanner, setEditingBanner] = useState<HeroBannerItem | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -232,6 +233,71 @@ export const BannerManager: React.FC = () => {
         </div>
       )}
 
+      {/* Global Quick Switch for Benefit Cards */}
+      <div className="bg-slate-950 p-4 sm:p-5 rounded-3xl border border-slate-800 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3">
+          <div
+            className={`p-3 rounded-2xl border shrink-0 ${
+              settings.hideBannerFeatures
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+            }`}
+          >
+            {settings.hideBannerFeatures ? <EyeOff className="w-5 h-5" /> : <ShieldCheck className="w-5 h-5" />}
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-black text-white">
+                Tarjetas de Beneficios en Banners
+              </h3>
+              <span
+                className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                  settings.hideBannerFeatures
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                }`}
+              >
+                {settings.hideBannerFeatures ? '🔴 DESACTIVADAS GLOBALMENTE' : '🟢 ACTIVADAS'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+              Recuadros de "Despacho Rápido", "Compra con Confianza", "Garantía Total" y "Stock Confirmado". Puedes desactivarlas en toda la tienda con 1 clic o configurarlas por cada banner.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={async () => {
+            const newHide = !settings.hideBannerFeatures;
+            await saveSettings({ ...settings, hideBannerFeatures: newHide });
+            showNotification(
+              'success',
+              newHide
+                ? 'Tarjetas de beneficios desactivadas en toda la tienda'
+                : 'Tarjetas de beneficios activadas en la tienda'
+            );
+          }}
+          className={`px-4 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center justify-center gap-2 shrink-0 shadow-lg ${
+            settings.hideBannerFeatures
+              ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-950/40'
+              : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-950/40'
+          }`}
+        >
+          {settings.hideBannerFeatures ? (
+            <>
+              <Eye className="w-4 h-4" />
+              <span>Activar Tarjetas en la Tienda</span>
+            </>
+          ) : (
+            <>
+              <EyeOff className="w-4 h-4" />
+              <span>Desactivar Tarjetas de Beneficios</span>
+            </>
+          )}
+        </button>
+      </div>
+
       {/* Banners List Grid */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
@@ -313,11 +379,43 @@ export const BannerManager: React.FC = () => {
                         {banner.secondaryButtonCategory || 'Todos'})
                       </span>
                     )}
-                    <span>
-                      Beneficios:{' '}
-                      <strong className="text-slate-300">
-                        {banner.features?.length || 4} tarjetas configuradas
-                      </strong>
+                    <span className="flex items-center gap-1.5">
+                      <span>Tarjetas:</span>
+                      <button
+                        type="button"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const newShow = banner.showFeatures === false ? true : false;
+                          const updated = banners.map((b) =>
+                            b.id === banner.id ? { ...b, showFeatures: newShow } : b
+                          );
+                          await saveBanners(updated);
+                          showNotification(
+                            'success',
+                            newShow
+                              ? 'Tarjetas de beneficios activadas para este banner'
+                              : 'Tarjetas de beneficios desactivadas para este banner'
+                          );
+                        }}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold border transition-colors cursor-pointer ${
+                          banner.showFeatures === false
+                            ? 'bg-rose-500/10 text-rose-300 border-rose-500/30 hover:bg-rose-500/20'
+                            : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
+                        }`}
+                        title="Clic para activar o desactivar las 4 tarjetas de beneficios en este banner"
+                      >
+                        {banner.showFeatures === false ? (
+                          <>
+                            <EyeOff className="w-3 h-3 text-rose-400" />
+                            <span>Desactivadas</span>
+                          </>
+                        ) : (
+                          <>
+                            <Eye className="w-3 h-3 text-emerald-400" />
+                            <span>Activadas ({banner.features?.length || 4})</span>
+                          </>
+                        )}
+                      </button>
                     </span>
                   </div>
                 </div>
@@ -687,65 +785,133 @@ export const BannerManager: React.FC = () => {
                 </div>
 
                 {/* 6. Four Features Cards */}
-                <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
-                  <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider block">
-                    6. Cuatro Tarjetas de Beneficios Laterales
-                  </span>
+                <div className="bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-4 shadow-md">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-indigo-400 uppercase tracking-wider block">
+                          6. Cuatro Tarjetas de Beneficios Laterales
+                        </span>
+                        <span
+                          className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                            editingBanner.showFeatures === false
+                              ? 'bg-rose-500/20 text-rose-300 border-rose-500/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          }`}
+                        >
+                          {editingBanner.showFeatures === false ? 'DESACTIVADAS' : 'ACTIVADAS'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Tarjetas de Despacho Rápido, Compra con Confianza, Garantía Total y Stock Confirmado.
+                      </p>
+                    </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {(editingBanner.features || []).map((feat, fIdx) => (
-                      <div key={feat.id || fIdx} className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-bold text-indigo-400 uppercase">
-                            Tarjeta #{fIdx + 1}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setEditingBanner({
+                          ...editingBanner,
+                          showFeatures: editingBanner.showFeatures === false ? true : false
+                        })
+                      }
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shrink-0 ${
+                        editingBanner.showFeatures === false
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30'
+                          : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                      }`}
+                    >
+                      {editingBanner.showFeatures === false ? (
+                        <>
+                          <EyeOff className="w-3.5 h-3.5 text-rose-400" />
+                          <span>Desactivadas (Clic para Activar)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>Activadas (Clic para Desactivar)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {editingBanner.showFeatures === false ? (
+                    <div className="p-4 bg-slate-900/80 border border-rose-500/30 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 text-xs text-rose-300">
+                        <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 shrink-0">
+                          <EyeOff className="w-5 h-5 text-rose-400" />
+                        </div>
+                        <div>
+                          <span className="font-bold text-white block">Tarjetas de beneficios desactivadas</span>
+                          <span className="text-[11px] text-slate-400">
+                            Este banner se mostrará limpio sin los 4 recuadros laterales de beneficios.
                           </span>
-                          <select
-                            value={feat.icon}
-                            onChange={(e) => {
-                              const newFeats = [...(editingBanner.features || [])];
-                              newFeats[fIdx] = { ...newFeats[fIdx], icon: e.target.value as any };
-                              setEditingBanner({ ...editingBanner, features: newFeats });
-                            }}
-                            className="bg-slate-950 border border-slate-700 text-slate-300 text-[10px] px-2 py-0.5 rounded cursor-pointer"
-                          >
-                            {FEATURE_ICONS.map((i) => (
-                              <option key={i.id} value={i.id}>
-                                {i.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <input
-                            type="text"
-                            value={feat.title}
-                            onChange={(e) => {
-                              const newFeats = [...(editingBanner.features || [])];
-                              newFeats[fIdx] = { ...newFeats[fIdx], title: e.target.value };
-                              setEditingBanner({ ...editingBanner, features: newFeats });
-                            }}
-                            placeholder="Título (ej: Despacho Veloz)"
-                            className="w-full px-2.5 py-1 bg-slate-950 border border-slate-700 rounded-lg text-xs font-bold text-white"
-                          />
-                        </div>
-
-                        <div>
-                          <input
-                            type="text"
-                            value={feat.description}
-                            onChange={(e) => {
-                              const newFeats = [...(editingBanner.features || [])];
-                              newFeats[fIdx] = { ...newFeats[fIdx], description: e.target.value };
-                              setEditingBanner({ ...editingBanner, features: newFeats });
-                            }}
-                            placeholder="Descripción (ej: Envíos rastreados directo a la puerta)"
-                            className="w-full px-2.5 py-1 bg-slate-950 border border-slate-700 rounded-lg text-[11px] text-slate-300"
-                          />
                         </div>
                       </div>
-                    ))}
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingBanner({ ...editingBanner, showFeatures: true })}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-colors cursor-pointer self-start sm:self-auto shadow-md"
+                      >
+                        Activar Tarjetas
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {(editingBanner.features || []).map((feat, fIdx) => (
+                        <div key={feat.id || fIdx} className="p-3 bg-slate-900/80 rounded-xl border border-slate-800 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-indigo-400 uppercase">
+                              Tarjeta #{fIdx + 1}
+                            </span>
+                            <select
+                              value={feat.icon}
+                              onChange={(e) => {
+                                const newFeats = [...(editingBanner.features || [])];
+                                newFeats[fIdx] = { ...newFeats[fIdx], icon: e.target.value as any };
+                                setEditingBanner({ ...editingBanner, features: newFeats });
+                              }}
+                              className="bg-slate-950 border border-slate-700 text-slate-300 text-[10px] px-2 py-0.5 rounded cursor-pointer"
+                            >
+                              {FEATURE_ICONS.map((i) => (
+                                <option key={i.id} value={i.id}>
+                                  {i.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <input
+                              type="text"
+                              value={feat.title}
+                              onChange={(e) => {
+                                const newFeats = [...(editingBanner.features || [])];
+                                newFeats[fIdx] = { ...newFeats[fIdx], title: e.target.value };
+                                setEditingBanner({ ...editingBanner, features: newFeats });
+                              }}
+                              placeholder="Título (ej: Despacho Veloz)"
+                              className="w-full px-2.5 py-1 bg-slate-950 border border-slate-700 rounded-lg text-xs font-bold text-white"
+                            />
+                          </div>
+
+                          <div>
+                            <input
+                              type="text"
+                              value={feat.description}
+                              onChange={(e) => {
+                                const newFeats = [...(editingBanner.features || [])];
+                                newFeats[fIdx] = { ...newFeats[fIdx], description: e.target.value };
+                                setEditingBanner({ ...editingBanner, features: newFeats });
+                              }}
+                              placeholder="Descripción (ej: Envíos rastreados directo a la puerta)"
+                              className="w-full px-2.5 py-1 bg-slate-950 border border-slate-700 rounded-lg text-[11px] text-slate-300"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* 7. Featured Products Attached to this Banner */}

@@ -9,7 +9,15 @@ interface ProductCardProps {
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
-  const { settings, addToCart, setIsCartOpen, setIsCheckoutOpen, setSelectedProduct } = useStore();
+  const {
+    settings,
+    addToCart,
+    setIsCartOpen,
+    setIsCheckoutOpen,
+    setSelectedProduct,
+    activeReseller,
+    calculateProductPriceForViajante
+  } = useStore();
   const [addedJustNow, setAddedJustNow] = useState(false);
   const [imageSrc, setImageSrc] = useState<string>(() => resolveImageUrl(product.imageUrl));
   const [retriedWithProxy, setRetriedWithProxy] = useState(false);
@@ -39,8 +47,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   // Out of stock / discontinued check
   const isAgotado = product.inStock === false || product.finalPrice === 0 || (product.stock !== undefined && product.stock <= 0) || product.lastVerifiedStatus === 'out_of_stock';
 
+  // Viajante calculation (if in Viajante Mode)
+  const viajanteCalc = activeReseller ? calculateProductPriceForViajante(product) : null;
+  const displayPrice = isAgotado ? 0 : (viajanteCalc ? viajanteCalc.viajantePrice : product.finalPrice);
+
   // Estimated 3 installments calculation
-  const installmentPrice = isAgotado ? 0 : Math.round(product.finalPrice / 3);
+  const installmentPrice = isAgotado ? 0 : Math.round(displayPrice / 3);
 
   return (
     <div

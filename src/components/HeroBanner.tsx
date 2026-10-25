@@ -320,128 +320,130 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onEditBanners }) => {
         </div>
 
         {/* Right Column: Visual Showcase (Featured Products OR Perks Grid) */}
-        <div className="lg:col-span-5 animate-fade-in">
-          {featuredProducts.length > 0 ? (
-            /* Featured Products Shelf / Interactive Showcase */
-            <div className="bg-slate-950/80 backdrop-blur-md border border-amber-500/30 p-4 sm:p-5 rounded-3xl shadow-2xl space-y-3.5">
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
-                <div className="flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-amber-400 fill-amber-400 animate-pulse" />
-                  <span className="text-xs font-black uppercase tracking-wider text-amber-300">
-                    OFERTAS DESTACADAS EN ESTA PROMO
+        {hasRightContent && (
+          <div className="lg:col-span-5 animate-fade-in">
+            {featuredProducts.length > 0 ? (
+              /* Featured Products Shelf / Interactive Showcase */
+              <div className="bg-slate-950/80 backdrop-blur-md border border-amber-500/30 p-4 sm:p-5 rounded-3xl shadow-2xl space-y-3.5">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-amber-400 fill-amber-400 animate-pulse" />
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-300">
+                      OFERTAS DESTACADAS EN ESTA PROMO
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-black border border-amber-400/30">
+                    {featuredProducts.length} {featuredProducts.length === 1 ? 'ARTÍCULO' : 'ARTÍCULOS'}
                   </span>
                 </div>
-                <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 text-[10px] font-black border border-amber-400/30">
-                  {featuredProducts.length} {featuredProducts.length === 1 ? 'ARTÍCULO' : 'ARTÍCULOS'}
-                </span>
-              </div>
 
-              {/* Products Cards List (shows up to 3 directly) */}
-              <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
-                {featuredProducts.slice(0, 3).map((prod) => {
-                  const installmentsAmount = Math.round(prod.finalPrice / 3);
-                  const isAdded = addedProductId === prod.id;
-                  return (
-                    <div
-                      key={prod.id}
-                      onClick={() => setSelectedProduct(prod)}
-                      className="group/card flex items-center justify-between p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/50 transition-all cursor-pointer shadow-md hover:shadow-amber-500/10 gap-3"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="relative shrink-0">
-                          <img
-                            src={resolveImageUrl(prod.imageUrl)}
-                            alt={prod.title}
-                            referrerPolicy="no-referrer"
-                            className="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-xl bg-slate-800 border border-slate-700 group-hover/card:scale-105 transition-transform"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src = DEFAULT_PRODUCT_PLACEHOLDER;
-                            }}
-                          />
-                          <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.2 rounded-md bg-rose-600 text-[9px] font-black text-white shadow-xs">
-                            OFERTA
-                          </span>
-                        </div>
-
-                        <div className="min-w-0">
-                          <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-1 group-hover/card:text-amber-300 transition-colors">
-                            {prod.title}
-                          </h4>
-                          <div className="flex items-baseline gap-2 mt-0.5">
-                            <span className="text-sm sm:text-base font-black font-mono text-emerald-400">
-                              $ {prod.finalPrice.toLocaleString('es-AR')}
-                            </span>
-                            <span className="text-[10px] text-amber-300/90 font-medium">
-                              3 cuotas de ${installmentsAmount.toLocaleString('es-AR')}
+                {/* Products Cards List (shows up to 3 directly) */}
+                <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                  {featuredProducts.slice(0, 3).map((prod) => {
+                    const installmentsAmount = Math.round(prod.finalPrice / 3);
+                    const isAdded = addedProductId === prod.id;
+                    return (
+                      <div
+                        key={prod.id}
+                        onClick={() => setSelectedProduct(prod)}
+                        className="group/card flex items-center justify-between p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-850 border border-slate-800 hover:border-amber-500/50 transition-all cursor-pointer shadow-md hover:shadow-amber-500/10 gap-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="relative shrink-0">
+                            <img
+                              src={resolveImageUrl(prod.imageUrl)}
+                              alt={prod.title}
+                              referrerPolicy="no-referrer"
+                              className="w-14 h-14 sm:w-16 sm:h-16 object-cover rounded-xl bg-slate-800 border border-slate-700 group-hover/card:scale-105 transition-transform"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = DEFAULT_PRODUCT_PLACEHOLDER;
+                              }}
+                            />
+                            <span className="absolute -top-1.5 -left-1.5 px-1.5 py-0.2 rounded-md bg-rose-600 text-[9px] font-black text-white shadow-xs">
+                              OFERTA
                             </span>
                           </div>
-                          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
-                            <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">
-                              {prod.category}
-                            </span>
-                            {prod.finalPrice >= (settings.freeShippingThreshold || 35000) && (
-                              <span className="text-cyan-400 font-bold flex items-center gap-0.5">
-                                <Truck className="w-2.5 h-2.5" /> Envío Gratis
+
+                          <div className="min-w-0">
+                            <h4 className="text-xs sm:text-sm font-bold text-white line-clamp-1 group-hover/card:text-amber-300 transition-colors">
+                              {prod.title}
+                            </h4>
+                            <div className="flex items-baseline gap-2 mt-0.5">
+                              <span className="text-sm sm:text-base font-black font-mono text-emerald-400">
+                                $ {prod.finalPrice.toLocaleString('es-AR')}
                               </span>
-                            )}
+                              <span className="text-[10px] text-amber-300/90 font-medium">
+                                3 cuotas de ${installmentsAmount.toLocaleString('es-AR')}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5">
+                              <span className="px-1.5 py-0.2 rounded bg-slate-800 text-slate-300">
+                                {prod.category}
+                              </span>
+                              {prod.finalPrice >= (settings.freeShippingThreshold || 35000) && (
+                                <span className="text-cyan-400 font-bold flex items-center gap-0.5">
+                                  <Truck className="w-2.5 h-2.5" /> Envío Gratis
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={(e) => handleQuickAdd(e, prod)}
-                          className={`p-2.5 rounded-xl font-bold text-xs flex items-center justify-center transition-all cursor-pointer shadow-md ${
-                            isAdded
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-amber-400 hover:bg-amber-300 text-slate-950 hover:scale-105'
-                          }`}
-                          title="Agregar al carrito"
-                        >
-                          {isAdded ? <Check className="w-4 h-4" /> : <ShoppingBag className="w-4 h-4" />}
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            type="button"
+                            onClick={(e) => handleQuickAdd(e, prod)}
+                            className={`p-2.5 rounded-xl font-bold text-xs flex items-center justify-center transition-all cursor-pointer shadow-md ${
+                              isAdded
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-amber-400 hover:bg-amber-300 text-slate-950 hover:scale-105'
+                            }`}
+                            title="Agregar al carrito"
+                          >
+                            {isAdded ? <Check className="w-4 h-4" /> : <ShoppingBag className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+
+                {featuredProducts.length > 3 && (
+                  <div className="text-center pt-1">
+                    <button
+                      onClick={handlePrimaryClick}
+                      className="text-[11px] font-bold text-amber-300 hover:underline cursor-pointer"
+                    >
+                      + Ver {featuredProducts.length - 3} ofertas destacadas más abajo
+                    </button>
+                  </div>
+                )}
               </div>
-
-              {featuredProducts.length > 3 && (
-                <div className="text-center pt-1">
-                  <button
-                    onClick={handlePrimaryClick}
-                    className="text-[11px] font-bold text-amber-300 hover:underline cursor-pointer"
+            ) : isBenefitsEnabled ? (
+              /* Fallback Perks Grid (Only shown when benefits are enabled) */
+              <div className="grid grid-cols-2 gap-3.5">
+                {bannerPerks.map((feat) => (
+                  <div
+                    key={feat.id}
+                    className="bg-slate-800/60 backdrop-blur-xs border border-slate-700/60 p-4 rounded-2xl flex flex-col justify-between hover:bg-slate-800/80 transition-colors"
                   >
-                    + Ver {featuredProducts.length - 3} ofertas destacadas más abajo
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Fallback Perks Grid */
-            <div className="grid grid-cols-2 gap-3.5">
-              {bannerPerks.map((feat) => (
-                <div
-                  key={feat.id}
-                  className="bg-slate-800/60 backdrop-blur-xs border border-slate-700/60 p-4 rounded-2xl flex flex-col justify-between hover:bg-slate-800/80 transition-colors"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-slate-700/40 flex items-center justify-center mb-3">
-                    {renderFeatureIcon(feat.icon)}
+                    <div className="w-10 h-10 rounded-xl bg-slate-700/40 flex items-center justify-center mb-3">
+                      {renderFeatureIcon(feat.icon)}
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-white">{feat.title}</h4>
+                      <p className="text-xs text-slate-400 mt-1">{feat.description}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-white">{feat.title}</h4>
-                    <p className="text-xs text-slate-400 mt-1">{feat.description}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
 
-      {/* When featured products are shown in the right column, render perks as a sleek bottom strip */}
-      {featuredProducts.length > 0 && bannerPerks.length > 0 && (
+      {/* When featured products are shown in the right column, render perks as a sleek bottom strip IF benefits are enabled */}
+      {featuredProducts.length > 0 && bannerPerks.length > 0 && isBenefitsEnabled && (
         <div className="border-t border-indigo-900/50 bg-slate-950/50 backdrop-blur-xs px-6 py-3.5 grid grid-cols-2 sm:grid-cols-4 gap-3">
           {bannerPerks.map((feat) => (
             <div key={feat.id} className="flex items-center gap-2.5 text-xs text-slate-300">
