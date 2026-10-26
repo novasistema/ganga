@@ -103,6 +103,12 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </span>
           ) : (
             <>
+              {viajanteCalc && (
+                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md shadow-md uppercase tracking-wider">
+                  💼 MODO VIAJANTE
+                </span>
+              )}
+
               {product.featured && (
                 <span className="inline-flex items-center gap-1 bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-md shadow-xs uppercase tracking-wider">
                   <Zap className="w-3 h-3 fill-slate-950" />
@@ -178,6 +184,26 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 <p className="text-[11px] font-semibold text-red-600 mt-1">
                   🚫 No disponible actualmente para compra
                 </p>
+              </div>
+            ) : viajanteCalc ? (
+              <div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-xl font-black text-emerald-700 tracking-tight">
+                    {formatCurrency(viajanteCalc.viajantePrice)}
+                  </span>
+                  <span className="text-xs text-slate-400 font-medium">
+                    (Base: {formatCurrency(viajanteCalc.storePrice)})
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-300">
+                    +{viajanteCalc.markupPercentage}% Ganancia
+                  </span>
+                  <span className="text-[11px] font-bold text-emerald-600">
+                    Ganás +{formatCurrency(viajanteCalc.profitPerUnit)}
+                  </span>
+                </div>
               </div>
             ) : (
               <div>

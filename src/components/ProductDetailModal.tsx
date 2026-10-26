@@ -16,7 +16,15 @@ import {
 import { resolveImageUrl } from '../utils/imageUrl';
 
 export const ProductDetailModal: React.FC = () => {
-  const { selectedProduct, setSelectedProduct, addToCart, setIsCheckoutOpen, settings } = useStore();
+  const {
+    selectedProduct,
+    setSelectedProduct,
+    addToCart,
+    setIsCheckoutOpen,
+    settings,
+    activeReseller,
+    calculateProductPriceForViajante
+  } = useStore();
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
   const [activeImage, setActiveImage] = useState<string>('');
@@ -170,6 +178,37 @@ export const ProductDetailModal: React.FC = () => {
                   </div>
                 );
               }
+
+              if (activeReseller) {
+                const calc = calculateProductPriceForViajante(selectedProduct);
+                return (
+                  <div className="mt-3 p-3.5 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-200">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full">
+                        💼 Tarifa Viajante ({activeReseller.assignedPriceListName || 'Lista Asignada'})
+                      </span>
+                      <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
+                        +{calc.markupPercentage}% margen
+                      </span>
+                    </div>
+                    <div className="flex items-baseline gap-2.5">
+                      <span className="text-2xl sm:text-3xl font-black text-gray-950">
+                        {formatCurrency(calc.viajantePrice)}
+                      </span>
+                      <span className="text-xs text-gray-500 font-medium line-through">
+                        Tienda: {formatCurrency(selectedProduct.finalPrice)}
+                      </span>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-amber-200/60 flex items-center justify-between text-xs">
+                      <span className="text-gray-600 font-medium">Ganancia por unidad:</span>
+                      <span className="font-black text-emerald-700">
+                        +{formatCurrency(calc.profitPerUnit)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div className="mt-3 p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
                   <div className="flex items-baseline gap-2.5">

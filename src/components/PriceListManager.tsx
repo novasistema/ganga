@@ -27,8 +27,11 @@ import {
   FileDown,
   Image as ImageIcon,
   X,
+  Plus,
   ExternalLink,
-  Loader2
+  Loader2,
+  UserCheck,
+  PhoneCall
 } from 'lucide-react';
 import { resolveImageUrl, DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
@@ -61,6 +64,14 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
   const [wholesaleMarkup, setWholesaleMarkup] = useState<number>(25);
   // 2. Reseller's own Markup (% de ganancia/recargo ARRIBA del precio de tienda)
   const [resellerMarkup, setResellerMarkup] = useState<number>(priceLists[0]?.markupPercentage ?? 20);
+
+  // Export Attribution to a specific Viajante / Vendedor
+  const [selectedResellerId, setSelectedResellerId] = useState<string>('general');
+
+  const selectedReseller = resellers.find((r) => r.id === selectedResellerId);
+  const effectiveSellerName = selectedReseller ? selectedReseller.name : (resellerName || settings.companyName || 'Nova Import');
+  const effectiveSellerPhone = selectedReseller?.phone || settings.whatsappNumber || '';
+  const effectiveSellerZone = selectedReseller?.zone || '';
 
   // Filters & Product Selection
   const [searchTerm, setSearchTerm] = useState('');
@@ -180,7 +191,14 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
 
     lines.push(`📋 *${listTitle.toUpperCase()}*`);
     lines.push(`🏢 *Distribuidor:* ${storeName}`);
-    if (resellerName) lines.push(`👤 *Dirigido a:* ${resellerName}`);
+    if (selectedReseller) {
+      lines.push(`👤 *Viajante / Vendedor:* ${effectiveSellerName}`);
+      if (effectiveSellerPhone) lines.push(`📲 *WhatsApp Directo:* ${effectiveSellerPhone}`);
+      if (effectiveSellerZone) lines.push(`🗺️ *Zona Asignada:* ${effectiveSellerZone}`);
+    } else if (resellerName) {
+      lines.push(`👤 *Dirigido a:* ${resellerName}`);
+      if (settings.whatsappNumber) lines.push(`📲 *WhatsApp Distribuidora:* ${settings.whatsappNumber}`);
+    }
     lines.push(`📈 *Margen Ganancia Vendedor:* +${resellerMarkup}%`);
     lines.push(`📅 *Fecha:* ${new Date().toLocaleDateString('es-AR')}`);
     lines.push(`━━━━━━━━━━━━━━━━━━━━━`);
@@ -202,7 +220,11 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
     lines.push(``);
     lines.push(`━━━━━━━━━━━━━━━━━━━━━`);
     if (listNotes) lines.push(`ℹ️ ${listNotes}`);
-    if (settings.whatsappNumber) lines.push(`📲 *Hacé tu pedido directo al WhatsApp:* ${settings.whatsappNumber}`);
+    if (effectiveSellerPhone) {
+      lines.push(`📲 *Hacé tu pedido directo al WhatsApp:* ${effectiveSellerPhone} (${effectiveSellerName})`);
+    } else if (settings.whatsappNumber) {
+      lines.push(`📲 *Hacé tu pedido directo al WhatsApp:* ${settings.whatsappNumber}`);
+    }
 
     const textToCopy = lines.join('\n');
     navigator.clipboard.writeText(textToCopy);
@@ -227,6 +249,8 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
       'Margen Revendedor (%)',
       'Ganancia Estimada Revendedor ($)',
       'Precio Venta Sugerido (PVP)',
+      'Viajante Asignado',
+      'WhatsApp Viajante',
       'Stock'
     ];
 
@@ -241,16 +265,25 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
         `${resellerMarkup}%`,
         calc.resellerProfitAmount,
         calc.suggestedPvp,
+        `"${effectiveSellerName}"`,
+        `"${effectiveSellerPhone}"`,
         p.stock
       ];
     });
 
-    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
+    const metaComments = [
+      `"# Lista: ${listTitle}"`,
+      `"# Viajante: ${effectiveSellerName} | WhatsApp: ${effectiveSellerPhone || 'N/A'}${effectiveSellerZone ? ' | Zona: ' + effectiveSellerZone : ''}"`,
+      `"# Fecha: ${new Date().toLocaleDateString('es-AR')}"`,
+      ''
+    ];
+
+    const csvContent = '\uFEFF' + [...metaComments, headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `lista-precios-revendedores-${Date.now().toString().slice(-4)}.csv`;
+    link.download = `lista-precios-${effectiveSellerName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString().slice(-4)}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -390,8 +423,10 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
         // Subtitle & Badges
         ctx.fillStyle = '#94a3b8';
         ctx.font = 'bold 17px sans-serif';
+        const subContact = effectiveSellerPhone ? ` • WhatsApp: ${effectiveSellerPhone}` : '';
+        const subZone = effectiveSellerZone ? ` • Zona: ${effectiveSellerZone}` : '';
         ctx.fillText(
-          `Para: ${resellerName} • Ganancia Vendedor: +${resellerMarkup}% • Fecha: ${new Date().toLocaleDateString('es-AR')}`,
+          `Viajante: ${effectiveSellerName}${subContact}${subZone} • Margen: +${resellerMarkup}% • Fecha: ${new Date().toLocaleDateString('es-AR')}`,
           headerTextX,
           144
         );
@@ -496,9 +531,9 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
 
         ctx.fillStyle = '#e2e8f0';
         ctx.font = 'bold 18px sans-serif';
-        const contactText = settings.whatsappNumber
-          ? `📲 Pedidos al WhatsApp: ${settings.whatsappNumber} • Stock Inmediato para Revendedores`
-          : 'Stock Inmediato y Envíos a Todo el País';
+        const contactText = effectiveSellerPhone
+          ? `📲 Pedidos & Contacto Directo: ${effectiveSellerName} (WhatsApp: ${effectiveSellerPhone})${effectiveSellerZone ? ' • Zona: ' + effectiveSellerZone : ''}`
+          : (settings.whatsappNumber ? `📲 Pedidos al WhatsApp: ${settings.whatsappNumber} • Stock Inmediato para Revendedores` : 'Stock Inmediato y Envíos a Todo el País');
         ctx.fillText(contactText, 60, footY + 45);
 
       } else {
@@ -547,8 +582,10 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
 
         ctx.fillStyle = '#94a3b8';
         ctx.font = 'bold 16px sans-serif';
+        const subContact2 = effectiveSellerPhone ? ` • 📲 ${effectiveSellerPhone}` : '';
+        const subZone2 = effectiveSellerZone ? ` • 🗺️ ${effectiveSellerZone}` : '';
         ctx.fillText(
-          `👤 ${resellerName} • 📈 Margen Vendedor: +${resellerMarkup}% • 📅 ${new Date().toLocaleDateString('es-AR')}`,
+          `👤 ${effectiveSellerName}${subContact2}${subZone2} • 📈 Margen: +${resellerMarkup}% • 📅 ${new Date().toLocaleDateString('es-AR')}`,
           headerTextX,
           138
         );
@@ -651,9 +688,9 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
         const footY = height - 80;
         ctx.fillStyle = '#e2e8f0';
         ctx.font = 'bold 18px sans-serif';
-        const contactText = settings.whatsappNumber
-          ? `📲 Pedidos al WhatsApp: ${settings.whatsappNumber} • Stock Inmediato para Revendedores`
-          : 'Stock Inmediato y Envíos a Todo el País';
+        const contactText = effectiveSellerPhone
+          ? `📲 Pedidos & Contacto Directo: ${effectiveSellerName} (WhatsApp: ${effectiveSellerPhone})${effectiveSellerZone ? ' • Zona: ' + effectiveSellerZone : ''}`
+          : (settings.whatsappNumber ? `📲 Pedidos al WhatsApp: ${settings.whatsappNumber} • Stock Inmediato para Revendedores` : 'Stock Inmediato y Envíos a Todo el País');
         ctx.fillText(contactText, 50, footY + 40);
       }
 
@@ -701,14 +738,14 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
     setIsGeneratingHtml(true);
     try {
       const storeName = settings.companyName || 'Nova Import';
-      const cleanWa = (settings.whatsappNumber || '').replace(/[^0-9]/g, '');
+      const cleanWa = (effectiveSellerPhone || settings.whatsappNumber || '').replace(/[^0-9]/g, '');
 
       const productCardsHtml = selectedList
         .map((p, idx) => {
           const calc = getProductCalculations(p);
           const imgSrc = resolveImageUrl(p.imageUrl);
           const waOrderText = encodeURIComponent(
-            `Hola! Quisiera encargar el producto *${p.title}* de la lista mayorista. Código/ID: ${p.id}`
+            `Hola ${effectiveSellerName}! Quisiera encargar el producto *${p.title}* de tu lista. ID: ${p.id}`
           );
 
           return `
@@ -794,8 +831,10 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
       <h1>${storeName.toUpperCase()}</h1>
       <div class="subtitle">${listTitle}</div>
       <div class="meta-bar">
-        <span class="meta-item">👤 Revendedor: ${resellerName}</span>
-        <span class="meta-item">📈 Ganancia Vendedor: +${resellerMarkup}%</span>
+        <span class="meta-item">👤 Viajante / Vendedor: <strong>${effectiveSellerName}</strong></span>
+        ${effectiveSellerPhone ? `<span class="meta-item">📲 WhatsApp: <strong>${effectiveSellerPhone}</strong></span>` : ''}
+        ${effectiveSellerZone ? `<span class="meta-item">🗺️ Zona: <strong>${effectiveSellerZone}</strong></span>` : ''}
+        <span class="meta-item">📈 Ganancia: +${resellerMarkup}%</span>
         <span class="meta-item">📅 Fecha: ${new Date().toLocaleDateString('es-AR')}</span>
         <span class="meta-item">📦 Artículos: ${selectedList.length}</span>
       </div>
@@ -808,7 +847,7 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
     </div>
 
     <footer>
-      ${storeName} • Catálogo Oficial de Precios Mayoristas para Revendedores
+      ${storeName} • Contacto Comercial: <strong>${effectiveSellerName}</strong> ${effectiveSellerPhone ? `(WhatsApp: ${effectiveSellerPhone})` : ''} ${effectiveSellerZone ? `• Zona: ${effectiveSellerZone}` : ''} • Envíos a todo el país
     </footer>
   </div>
 
@@ -1114,6 +1153,20 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
         </div>
       </div>
 
+      {/* Configuration Controls Bar */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Margin 1: Base Markup */}
+        <div className="bg-slate-950 p-4 rounded-3xl border border-indigo-900/60 shadow-md space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-indigo-300 uppercase tracking-wide flex items-center gap-1.5">
+              <TrendingUp className="w-4 h-4 text-indigo-400" />
+              1. {calculationBase === 'store_price' ? 'Base: Tienda Online' : 'Margen Mayorista'}
+            </span>
+            <span className="text-[10px] text-indigo-400 font-bold">
+              {calculationBase === 'store_price' ? 'Precio Web' : 'S/ Costo'}
+            </span>
+          </div>
+
           <div className="flex items-center gap-2">
             <div className="flex items-center bg-slate-900 border border-indigo-700/60 rounded-xl px-3 py-2 flex-1">
               <span className="text-xs text-slate-400 font-bold mr-1">+</span>
@@ -1337,6 +1390,61 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
           </button>
         </div>
 
+        {/* SELECTOR DE VIAJANTE PARA DESCARGA / EXPORTACIÓN */}
+        <div className="bg-slate-900/90 p-4 rounded-2xl border border-indigo-900/60 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-inner">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-indigo-600/20 border border-indigo-500/30 rounded-xl text-indigo-400 shrink-0">
+              <UserCheck className="w-5 h-5 text-indigo-300" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-black text-white uppercase tracking-wider">
+                  👤 Viajante Asignado para la Descarga:
+                </span>
+                {selectedReseller && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-950 text-emerald-400 border border-emerald-800/60">
+                    +{selectedReseller.commissionPercentage || resellerMarkup}% Ganancia
+                  </span>
+                )}
+                {effectiveSellerPhone && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-950 text-sky-300 border border-sky-800/60 flex items-center gap-1">
+                    <PhoneCall className="w-3 h-3 text-sky-400" />
+                    <span>WhatsApp: {effectiveSellerPhone}</span>
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Selecciona al viajante para que su nombre, teléfono WhatsApp y zona figuren automáticamente en el catálogo exportado (PNG, HTML, WhatsApp o PDF).
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <select
+              value={selectedResellerId}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedResellerId(val);
+                if (val !== 'general') {
+                  const match = resellers.find((r) => r.id === val);
+                  if (match) {
+                    setResellerName(match.name);
+                    if (match.commissionPercentage) setResellerMarkup(match.commissionPercentage);
+                  }
+                }
+              }}
+              className="px-3.5 py-2.5 bg-slate-950 border border-indigo-600/70 rounded-xl text-xs text-indigo-200 font-bold focus:outline-hidden cursor-pointer shadow-md"
+            >
+              <option value="general">🏢 Distribuidora General ({settings.companyName || 'Empresa'} • Tel: {settings.whatsappNumber || 'Sin configurar'})</option>
+              {resellers.map((r) => (
+                <option key={r.id} value={r.id}>
+                  👤 {r.name} {r.phone ? `(WhatsApp: ${r.phone})` : ''} {r.zone ? `• Zona: ${r.zone}` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
         {/* Buttons Row */}
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Main Action: Download PNG with Real Photos */}
@@ -1456,8 +1564,8 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
               onClick={() => {
                 setListTitle(p.name);
                 if (p.resellerName) setResellerName(p.resellerName);
-                setWholesaleMarkup(p.wholesaleMarkupPercentage);
-                setResellerMarkup(p.resellerMarkupPercentage);
+                setWholesaleMarkup(p.wholesaleMarkupPercentage ?? 0);
+                setResellerMarkup(p.resellerMarkupPercentage ?? p.markupPercentage ?? 20);
                 setHideSupplierCost(p.hideOriginalCost);
                 setShowResellerProfit(p.showResellerProfit);
                 setShowSuggestedPvp(p.showSuggestedPvp);
@@ -1801,15 +1909,17 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
                     {listTitle}
                   </h2>
                   <p className="text-xs text-slate-600 mt-0.5">
-                    Para: <strong className="text-slate-900">{resellerName}</strong> • Margen Ganancia Vendedor: <strong>+{resellerMarkup}%</strong>
+                    Viajante / Asesor: <strong className="text-slate-900">{effectiveSellerName}</strong>
+                    {effectiveSellerZone && <span> • Zona: <strong className="text-purple-700">{effectiveSellerZone}</strong></span>}
+                    <span> • Margen Ganancia: <strong>+{resellerMarkup}%</strong></span>
                   </p>
                 </div>
               </div>
 
               <div className="sm:text-right text-xs text-slate-600 space-y-1">
                 <div>Fecha de emisión: <strong className="text-slate-900">{new Date().toLocaleDateString('es-AR')}</strong></div>
-                {settings.whatsappNumber && (
-                  <div>WhatsApp Pedidos: <strong className="text-emerald-700">{settings.whatsappNumber}</strong></div>
+                {effectiveSellerPhone && (
+                  <div>Contacto WhatsApp: <strong className="text-emerald-700">{effectiveSellerPhone}</strong></div>
                 )}
                 <div className="text-[11px] text-slate-500">
                   {displayProducts.filter((p) => selectedProductIds.includes(p.id)).length} artículos listados
@@ -1956,7 +2066,7 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
                 {listNotes || 'Precios válidos para pedidos por mayor. Stock sujeto a confirmación y disponibilidad.'}
               </p>
               <p className="text-[11px] text-slate-500">
-                {settings.companyName || 'Nova Import'} • Envíos a todo el país • {settings.whatsappNumber ? `WhatsApp: ${settings.whatsappNumber}` : ''}
+                {settings.companyName || 'Nova Import'} • Consultas y Pedidos Directos: <strong>{effectiveSellerName}</strong> {effectiveSellerPhone ? `(WhatsApp: ${effectiveSellerPhone})` : ''} {effectiveSellerZone ? `• Zona: ${effectiveSellerZone}` : ''} • Envíos a todo el país
               </p>
             </div>
           </div>

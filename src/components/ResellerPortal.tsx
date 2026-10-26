@@ -79,6 +79,7 @@ export const ResellerPortal: React.FC<ResellerPortalProps> = ({ onClose }) => {
     isResellerPortalOpen,
     setIsResellerPortalOpen,
     activePriceList,
+    setActivePriceList,
     priceLists,
     calculateProductPriceForViajante
   } = useStore();
@@ -126,26 +127,14 @@ export const ResellerPortal: React.FC<ResellerPortalProps> = ({ onClose }) => {
     return `${settings.currencySymbol || '$'} ${val.toLocaleString('es-AR')}`;
   };
 
-  // Viajante markup calculation: Base is Store Final Price + List Markup %
+  // Viajante markup calculation: Base is Store Final Price + List Markup % (or Reseller Commission)
   const getProductCalculations = (p: Product) => {
-    // 1. Base price from online store
-    const storePrice = p.finalPrice;
-
-    // 2. Markup % from assigned list or reseller commission
-    const listMarkup = activePriceList?.markupPercentage ?? activePriceList?.resellerMarkupPercentage;
-    const commissionPercent = typeof listMarkup === 'number'
-      ? listMarkup
-      : (activeReseller?.commissionPercentage || 20);
-
-    // 3. Price to sell to the customer (Store Price + % markup)
-    const salePriceToCustomer = Math.round(storePrice * (1 + commissionPercent / 100));
-    const profitPerUnit = salePriceToCustomer - storePrice;
-
+    const calc = calculateProductPriceForViajante(p, activePriceList);
     return {
-      wholesalePrice: storePrice, // Lo que rinde a la distribuidora
-      salePriceToCustomer,        // Lo que el viajante le cobra al cliente
-      profitPerUnit,              // Ganancia del viajante
-      commissionPercent
+      wholesalePrice: calc.storePrice,      // Lo que rinde a la distribuidora
+      salePriceToCustomer: calc.viajantePrice, // Lo que el viajante le cobra al cliente
+      profitPerUnit: calc.profitPerUnit,       // Ganancia neta para el viajante
+      commissionPercent: calc.markupPercentage
     };
   };
 
@@ -481,11 +470,25 @@ export const ResellerPortal: React.FC<ResellerPortalProps> = ({ onClose }) => {
                 <ShieldCheck className="w-3.5 h-3.5" />
                 <span>MODO VIAJANTE ACTIVO</span>
               </span>
-              <span className="bg-sky-500/20 text-sky-300 font-black text-[10px] px-2.5 py-0.5 rounded-md border border-sky-500/30">
-                📋 Lista: {activePriceList?.name || activeReseller.assignedPriceListName || 'Lista Estándar'}
-              </span>
+              <div className="flex items-center gap-1.5 bg-slate-900 border border-emerald-700/60 rounded-lg px-2 py-0.5">
+                <span className="text-[10px] text-slate-400 font-bold uppercase">📋 Lista:</span>
+                <select
+                  value={activePriceList?.id || ''}
+                  onChange={(e) => {
+                    const match = priceLists.find((pl) => pl.id === e.target.value);
+                    if (match) setActivePriceList(match);
+                  }}
+                  className="bg-transparent text-emerald-300 font-black text-xs focus:outline-hidden cursor-pointer"
+                >
+                  {priceLists.map((pl) => (
+                    <option key={pl.id} value={pl.id} className="bg-slate-900 text-white">
+                      {pl.name} (+{pl.markupPercentage ?? pl.resellerMarkupPercentage}%)
+                    </option>
+                  ))}
+                </select>
+              </div>
               <span className="bg-indigo-500/20 text-indigo-300 font-black text-[10px] px-2.5 py-0.5 rounded-md border border-indigo-500/30">
-                📈 Tu Ganancia: +{activePriceList?.markupPercentage ?? activeReseller.commissionPercentage}% s/ precio tienda
+                📈 Margen de Ganancia: +{activePriceList?.markupPercentage ?? activePriceList?.resellerMarkupPercentage ?? activeReseller.commissionPercentage}% s/ tienda
               </span>
               {activeReseller.zone && (
                 <span className="bg-purple-500/20 text-purple-300 font-black text-[10px] px-2.5 py-0.5 rounded-md border border-purple-500/30">

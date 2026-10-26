@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import {
   collection,
   doc,
@@ -411,6 +411,21 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           list.push({ id: d.id, ...d.data() } as ResellerUser);
         });
         setResellers(list);
+
+        // Keep activeReseller in sync with fresh Firestore values (commission, assigned list, zone, etc.)
+        setActiveReseller((current) => {
+          if (!current) return null;
+          const match = list.find(
+            (r) => r.id === current.id || r.username.toLowerCase() === current.username.toLowerCase()
+          );
+          if (match) {
+            try {
+              localStorage.setItem('nova_reseller_session', JSON.stringify(match));
+            } catch {}
+            return match;
+          }
+          return current;
+        });
       },
       (error) => {
         console.warn('Resellers onSnapshot error:', error.message);
@@ -1178,11 +1193,32 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     ? settings.priceLists
     : DEFAULT_PRICE_LISTS;
 
-  const activePriceList: ResellerPriceList | null = manualPriceList || (
-    activeReseller?.assignedPriceListId
-      ? priceLists.find((pl) => pl.id === activeReseller.assignedPriceListId) || null
-      : null
-  );
+  const activePriceList: ResellerPriceList | null = useMemo(() => {
+    if (manualPriceList) return manualPriceList;
+    if (!activeReseller) return null;
+
+    // 1. Match by assignedPriceListId
+    if (activeReseller.assignedPriceListId) {
+      const match = priceLists.find((pl) => pl.id === activeReseller.assignedPriceListId);
+      if (match) return match;
+    }
+    // 2. Match by assignedPriceListName
+    if (activeReseller.assignedPriceListName) {
+      const match = priceLists.find(
+        (pl) => pl.name.toLowerCase().trim() === activeReseller.assignedPriceListName?.toLowerCase().trim()
+      );
+      if (match) return match;
+    }
+    // 3. Match by commission percentage
+    if (typeof activeReseller.commissionPercentage === 'number') {
+      const match = priceLists.find(
+        (pl) => (pl.markupPercentage ?? pl.resellerMarkupPercentage) === activeReseller.commissionPercentage
+      );
+      if (match) return match;
+    }
+    // 4. Default to first available list
+    return priceLists[0] || null;
+  }, [manualPriceList, activeReseller, priceLists]);
 
   const setActivePriceList = (list: ResellerPriceList | null) => {
     setManualPriceList(list);
@@ -1226,13 +1262,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       markup = activeReseller.commissionPercentage;
     }
 
-    const viajantePrice = Math.round(storePrice * (1 + markup / 100));
+    // Base calculation: 'store_price' (default) uses product.finalPrice; 'wholesale_cost' uses product.originalPrice
+    const calcBase = listToUse?.calculationBase || 'store_price';
+    const basePrice = (calcBase === 'wholesale_cost' && product.originalPrice)
+      ? product.originalPrice
+      : storePrice;
+
+    const viajantePrice = Math.round(basePrice * (1 + markup / 100));
     const profitPerUnit = viajantePrice - storePrice;
 
     return {
       storePrice,
       viajantePrice,
-      profitPerUnit,
+      profitPerUnit: Math.max(0, profitPerUnit),
       markupPercentage: markup
     };
   };

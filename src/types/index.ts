@@ -125,6 +125,8 @@ export interface Order {
   resellerCommissionPercentage?: number;
   resellerCommissionAmount?: number;
   resellerWholesaleTotal?: number;
+  assignedPriceListId?: string;
+  assignedPriceListName?: string;
   shippingCarrier?: string;
   customerProvince?: string;
   customerPostalCode?: string;

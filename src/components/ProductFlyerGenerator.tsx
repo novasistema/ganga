@@ -17,7 +17,9 @@ import {
   RefreshCw,
   Phone,
   DollarSign,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import { resolveImageUrl, DEFAULT_PRODUCT_PLACEHOLDER } from '../utils/imageUrl';
 
@@ -59,6 +61,10 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
     settings.whatsappNumber ? `Pedidos al WhatsApp: ${settings.whatsappNumber}` : 'Envíos a todo el país • Stock Inmediato'
   );
 
+  // Custom Image Override & Image Reload Trigger
+  const [customImageOverride, setCustomImageOverride] = useState<string>('');
+  const [imageReloadKey, setImageReloadKey] = useState<number>(0);
+
   // Status feedback
   const [isExporting, setIsExporting] = useState(false);
   const [copiedSuccess, setCopiedSuccess] = useState(false);
@@ -93,28 +99,116 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
     ? Math.round(effectiveFinalPrice * 1.35)
     : 0;
 
-  // Helper to load image through proxy
-  const loadCORSImage = (src: string): Promise<HTMLImageElement> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
+  // Multi-tier helper to load images without CORS taint or cache bugs
+  const loadCORSImage = async (src: string, fallbackCandidates: string[] = []): Promise<HTMLImageElement> => {
+    const clean = (src || '').trim();
+    if (!clean || clean === DEFAULT_PRODUCT_PLACEHOLDER) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.src = DEFAULT_PRODUCT_PLACEHOLDER;
+      });
+    }
 
-      let targetSrc = resolveImageUrl(src);
-      // If external URL, pass through our server image-proxy
-      if (targetSrc.startsWith('http://') || targetSrc.startsWith('https://')) {
-        targetSrc = `/api/image-proxy?url=${encodeURIComponent(targetSrc)}`;
+    // Direct local data URI or blob URL
+    if (clean.startsWith('data:') || clean.startsWith('blob:')) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Failed to load data URL'));
+        img.src = clean;
+      });
+    }
+
+    // Build ordered list of candidate URLs
+    const candidates: string[] = [];
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      // 1. Through proxy with cache buster
+      candidates.push(`/api/image-proxy?url=${encodeURIComponent(clean)}&cb=${Date.now()}`);
+      // 2. Direct URL
+      candidates.push(clean);
+    } else if (clean.startsWith('/api/image-proxy')) {
+      candidates.push(clean);
+      try {
+        const parsed = new URL(clean, window.location.origin);
+        const raw = parsed.searchParams.get('url');
+        if (raw) candidates.push(raw);
+      } catch {}
+    } else {
+      candidates.push(clean);
+    }
+
+    // Also include product gallery candidates if available
+    for (const fb of fallbackCandidates) {
+      const fbClean = (fb || '').trim();
+      if (fbClean && fbClean !== clean) {
+        if (fbClean.startsWith('http://') || fbClean.startsWith('https://')) {
+          candidates.push(`/api/image-proxy?url=${encodeURIComponent(fbClean)}&cb=${Date.now()}`);
+          candidates.push(fbClean);
+        } else {
+          candidates.push(fbClean);
+        }
       }
+    }
 
+    // Tier 1: Fetch as Blob with CORS (prevents canvas tainting & browser cache collisions)
+    for (const url of candidates) {
+      try {
+        const res = await fetch(url, { mode: 'cors' });
+        if (res.ok) {
+          const blob = await res.blob();
+          if (blob.size > 200) {
+            const objectUrl = URL.createObjectURL(blob);
+            const loaded = await new Promise<HTMLImageElement>((resolve, reject) => {
+              const img = new Image();
+              img.onload = () => resolve(img);
+              img.onerror = reject;
+              img.src = objectUrl;
+            });
+            return loaded;
+          }
+        }
+      } catch {
+        // Continue to next candidate
+      }
+    }
+
+    // Tier 2: Image element with crossOrigin anonymous
+    for (const url of candidates) {
+      try {
+        const loaded = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = url;
+        });
+        return loaded;
+      } catch {
+        // Continue
+      }
+    }
+
+    // Tier 3: Image element without crossOrigin (safe for canvas drawing)
+    for (const url of candidates) {
+      try {
+        const loaded = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = url;
+        });
+        return loaded;
+      } catch {
+        // Continue
+      }
+    }
+
+    // Fallback: Default Placeholder
+    return new Promise((resolve) => {
+      const img = new Image();
       img.onload = () => resolve(img);
-      img.onerror = () => {
-        // Fallback to placeholder if failed
-        const fallback = new Image();
-        fallback.crossOrigin = 'anonymous';
-        fallback.onload = () => resolve(fallback);
-        fallback.onerror = (e) => reject(e);
-        fallback.src = DEFAULT_PRODUCT_PLACEHOLDER;
-      };
-      img.src = targetSrc;
+      img.src = DEFAULT_PRODUCT_PLACEHOLDER;
     });
   };
 
@@ -122,7 +216,8 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
   const renderFlyerToCanvas = async (
     canvas: HTMLCanvasElement,
     product: Product,
-    overridePrice?: number
+    overridePrice?: number,
+    overrideImageUrl?: string
   ) => {
     const isVertical = aspectRatio === '9:16' || theme === 'vertical_story';
     const width = 1080;
@@ -254,7 +349,8 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
 
     // Draw the product image
     try {
-      const prodImg = await loadCORSImage(product.imageUrl || DEFAULT_PRODUCT_PLACEHOLDER);
+      const activeSrc = overrideImageUrl || customImageOverride || product.imageUrl || (product.galleryUrls && product.galleryUrls[0]) || DEFAULT_PRODUCT_PLACEHOLDER;
+      const prodImg = await loadCORSImage(activeSrc, product.galleryUrls || []);
       // Calculate aspect ratio fit (contain within container)
       const pAspect = prodImg.width / prodImg.height;
       const cAspect = (imgW - 40) / (imgH - 40);
@@ -422,9 +518,11 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
   // Re-render preview canvas whenever inputs change
   useEffect(() => {
     if (!previewCanvasRef.current || !currentProduct) return;
-    renderFlyerToCanvas(previewCanvasRef.current, currentProduct, effectiveFinalPrice);
+    renderFlyerToCanvas(previewCanvasRef.current, currentProduct, effectiveFinalPrice, customImageOverride);
   }, [
     currentProduct,
+    customImageOverride,
+    imageReloadKey,
     theme,
     aspectRatio,
     customBadge,
@@ -440,7 +538,7 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
     if (!previewCanvasRef.current || !currentProduct) return;
     setIsExporting(true);
     try {
-      await renderFlyerToCanvas(previewCanvasRef.current, currentProduct, effectiveFinalPrice);
+      await renderFlyerToCanvas(previewCanvasRef.current, currentProduct, effectiveFinalPrice, customImageOverride);
       const dataUrl = previewCanvasRef.current.toDataURL('image/png', 0.95);
       const link = document.createElement('a');
       const safeTitle = currentProduct.title
@@ -462,7 +560,7 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
     if (!previewCanvasRef.current || !currentProduct) return;
     setIsExporting(true);
     try {
-      await renderFlyerToCanvas(previewCanvasRef.current, currentProduct, effectiveFinalPrice);
+      await renderFlyerToCanvas(previewCanvasRef.current, currentProduct, effectiveFinalPrice, customImageOverride);
       previewCanvasRef.current.toBlob(async (blob) => {
         if (!blob) throw new Error('No se pudo generar el archivo de imagen.');
         try {
@@ -779,6 +877,84 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
                   <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Vertical 9:16 (WhatsApp Status)</span>
                 </button>
+              </div>
+            </div>
+
+            {/* Product Photo Selector & Image Override */}
+            <div className="bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Foto del Producto en la Placa</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setImageReloadKey((k) => k + 1)}
+                  className="text-[10px] text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
+                  title="Forzar recarga de la imagen"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Recargar</span>
+                </button>
+              </div>
+
+              {/* Multiple Gallery Photos selection */}
+              {currentProduct?.galleryUrls && currentProduct.galleryUrls.length > 1 && (
+                <div>
+                  <span className="text-[10px] text-slate-400 block mb-1">Fotos disponibles del producto:</span>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {currentProduct.galleryUrls.map((url, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setCustomImageOverride(url)}
+                        className={`w-10 h-10 rounded-lg overflow-hidden border-2 transition-all cursor-pointer shrink-0 ${
+                          (customImageOverride || currentProduct.imageUrl) === url
+                            ? 'border-indigo-500 ring-2 ring-indigo-400/50'
+                            : 'border-slate-800 opacity-60 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={resolveImageUrl(url)} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Upload local image or reset */}
+              <div className="flex gap-2">
+                <label className="flex-1 py-1.5 px-3 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl text-xs text-slate-300 flex items-center justify-center gap-1.5 cursor-pointer transition-colors">
+                  <Upload className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>{customImageOverride ? 'Cambiar Foto Subida' : 'Subir Foto Propia'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          if (ev.target?.result) {
+                            setCustomImageOverride(ev.target.result as string);
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                  />
+                </label>
+
+                {customImageOverride && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomImageOverride('')}
+                    className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl text-xs cursor-pointer"
+                    title="Restablecer a la foto original"
+                  >
+                    Restablecer
+                  </button>
+                )}
               </div>
             </div>
 

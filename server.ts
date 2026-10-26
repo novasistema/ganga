@@ -2094,7 +2094,19 @@ app.get('/api/dollar-rate', async (_req: Request, res: Response) => {
 });
 
 // API Image Proxy to bypass hotlinking protection, CORS or Referer blocking for Inova ARG & other suppliers
+app.options('/api/image-proxy', (req: Request, res: Response) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  return res.sendStatus(204);
+});
+
 app.get('/api/image-proxy', async (req: Request, res: Response) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Vary', 'Origin');
+
   try {
     const rawUrl = req.query.url as string;
     if (!rawUrl || typeof rawUrl !== 'string') {
@@ -2177,6 +2189,7 @@ app.get('/api/image-proxy', async (req: Request, res: Response) => {
 
     if (!upstream.ok) {
       // Sleek fallback SVG so the image tag never shows a broken icon
+      res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Content-Type', 'image/svg+xml');
       res.setHeader('Cache-Control', 'public, max-age=86400');
       return res.send(`
@@ -2197,6 +2210,7 @@ app.get('/api/image-proxy', async (req: Request, res: Response) => {
     const arrayBuffer = await upstream.arrayBuffer();
     return res.send(Buffer.from(arrayBuffer));
   } catch {
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Content-Type', 'image/svg+xml');
     return res.send(`
       <svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" fill="none">
