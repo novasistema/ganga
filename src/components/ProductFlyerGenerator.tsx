@@ -54,7 +54,7 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
   const [customBadge, setCustomBadge] = useState('🔥 SUPER OFERTA');
   const [showFreeShipping, setShowFreeShipping] = useState(true);
-  const [showInstallments, setShowInstallments] = useState(true);
+  const [showInstallments, setShowInstallments] = useState(settings.enableInstallments !== false);
   const [showStoreLogo, setShowStoreLogo] = useState(true);
   const [customPriceOverride, setCustomPriceOverride] = useState<string>('');
   const [customFooterNote, setCustomFooterNote] = useState(
@@ -105,34 +105,45 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
     if (!clean || clean === DEFAULT_PRODUCT_PLACEHOLDER) {
       return new Promise((resolve) => {
         const img = new Image();
+        img.crossOrigin = 'anonymous';
         img.onload = () => resolve(img);
         img.src = DEFAULT_PRODUCT_PLACEHOLDER;
       });
     }
 
-    // Direct local data URI or blob URL
+    // Direct local data URI or blob URL (100% safe, never taints canvas)
     if (clean.startsWith('data:') || clean.startsWith('blob:')) {
       return new Promise((resolve, reject) => {
         const img = new Image();
+        img.crossOrigin = 'anonymous';
         img.onload = () => resolve(img);
         img.onerror = () => reject(new Error('Failed to load data URL'));
         img.src = clean;
       });
     }
 
-    // Build ordered list of candidate URLs
+    // Build ordered list of candidate URLs with CORS-enabled proxies first
+    // Note: On Vercel (e.g. novaimport.vercel.app), public CORS proxies like weserv.nl guarantee
+    // clean headers without requiring a backend Express server!
     const candidates: string[] = [];
     if (clean.startsWith('http://') || clean.startsWith('https://')) {
-      // 1. Through proxy with cache buster
+      // 1. High-speed global image cache & CORS proxy (works seamlessly on Vercel)
+      candidates.push(`https://images.weserv.nl/?url=${encodeURIComponent(clean)}&default=1`);
+      // 2. Local backend proxy route
       candidates.push(`/api/image-proxy?url=${encodeURIComponent(clean)}&cb=${Date.now()}`);
-      // 2. Direct URL
+      // 3. Fallback public CORS proxy
+      candidates.push(`https://corsproxy.io/?url=${encodeURIComponent(clean)}`);
+      // 4. Direct origin URL (if server permits CORS)
       candidates.push(clean);
     } else if (clean.startsWith('/api/image-proxy')) {
       candidates.push(clean);
       try {
         const parsed = new URL(clean, window.location.origin);
         const raw = parsed.searchParams.get('url');
-        if (raw) candidates.push(raw);
+        if (raw) {
+          candidates.push(`https://images.weserv.nl/?url=${encodeURIComponent(raw)}&default=1`);
+          candidates.push(raw);
+        }
       } catch {}
     } else {
       candidates.push(clean);
@@ -143,6 +154,7 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
       const fbClean = (fb || '').trim();
       if (fbClean && fbClean !== clean) {
         if (fbClean.startsWith('http://') || fbClean.startsWith('https://')) {
+          candidates.push(`https://images.weserv.nl/?url=${encodeURIComponent(fbClean)}&default=1`);
           candidates.push(`/api/image-proxy?url=${encodeURIComponent(fbClean)}&cb=${Date.now()}`);
           candidates.push(fbClean);
         } else {
@@ -151,16 +163,21 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
       }
     }
 
-    // Tier 1: Fetch as Blob with CORS (prevents canvas tainting & browser cache collisions)
+    // Tier 1: Fetch as Blob with CORS (guarantees canvas is NEVER tainted)
     for (const url of candidates) {
       try {
-        const res = await fetch(url, { mode: 'cors' });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(url, { mode: 'cors', signal: controller.signal });
+        clearTimeout(timeout);
         if (res.ok) {
           const blob = await res.blob();
-          if (blob.size > 200) {
+          // Verify it's actually an image (not an HTML 404 page)
+          if (blob.size > 200 && (blob.type.startsWith('image/') || blob.type === 'application/octet-stream' || !blob.type)) {
             const objectUrl = URL.createObjectURL(blob);
             const loaded = await new Promise<HTMLImageElement>((resolve, reject) => {
               const img = new Image();
+              img.crossOrigin = 'anonymous';
               img.onload = () => resolve(img);
               img.onerror = reject;
               img.src = objectUrl;
@@ -173,7 +190,7 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
       }
     }
 
-    // Tier 2: Image element with crossOrigin anonymous
+    // Tier 2: Image element with crossOrigin = 'anonymous'
     for (const url of candidates) {
       try {
         const loaded = await new Promise<HTMLImageElement>((resolve, reject) => {
@@ -189,24 +206,12 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
       }
     }
 
-    // Tier 3: Image element without crossOrigin (safe for canvas drawing)
-    for (const url of candidates) {
-      try {
-        const loaded = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = reject;
-          img.src = url;
-        });
-        return loaded;
-      } catch {
-        // Continue
-      }
-    }
-
-    // Fallback: Default Placeholder
+    // STRICT SAFETY: We deliberately DO NOT load without crossOrigin!
+    // Drawing any un-anonymized external image to a canvas taints it, which blocks toDataURL / toBlob.
+    // Fallback: Default clean SVG Placeholder (guaranteed 100% CORS-clean)
     return new Promise((resolve) => {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.onload = () => resolve(img);
       img.src = DEFAULT_PRODUCT_PLACEHOLDER;
     });
@@ -230,7 +235,9 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
 
     const price = overridePrice !== undefined ? overridePrice : (product.finalPrice || 0);
     const compPrice = price > 0 ? Math.round(price * 1.35) : 0;
-    const installments = price > 0 ? Math.round(price / 3) : 0;
+    const count = settings.installmentsCount || 3;
+    const isInterestFree = settings.installmentsType !== 'fixed';
+    const installments = price > 0 ? Math.round(price / count) : 0;
     const isAgotado = product.inStock === false || price === 0 || product.lastVerifiedStatus === 'out_of_stock';
 
     // 1. Background Fill according to Theme
@@ -468,11 +475,11 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
         ctx.stroke();
       }
 
-      // 3 Installments notice
-      if (showInstallments && installments > 0) {
+      // Installments notice (General para todos o para ninguno)
+      if (showInstallments && installments > 0 && settings.enableInstallments !== false) {
         ctx.fillStyle = theme === 'clean_white' ? '#16a34a' : '#4ade80';
         ctx.font = 'bold 26px sans-serif';
-        ctx.fillText(`💳 3 cuotas fijas de ${formatCurrency(installments)}`, 60, priceBoxY + 98);
+        ctx.fillText(`💳 ${count} cuotas ${isInterestFree ? 'sin interés' : 'fijas'} de ${formatCurrency(installments)}`, 60, priceBoxY + 98);
       }
     }
 
@@ -539,7 +546,17 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
     setIsExporting(true);
     try {
       await renderFlyerToCanvas(previewCanvasRef.current, currentProduct, effectiveFinalPrice, customImageOverride);
-      const dataUrl = previewCanvasRef.current.toDataURL('image/png', 0.95);
+      
+      let dataUrl = '';
+      try {
+        dataUrl = previewCanvasRef.current.toDataURL('image/png', 0.95);
+      } catch (taintErr: any) {
+        console.warn('Canvas export tainted, forcing clean placeholder render:', taintErr);
+        // If an untrusted resource tainted the canvas, re-render immediately with guaranteed clean SVG placeholder
+        await renderFlyerToCanvas(previewCanvasRef.current, currentProduct, effectiveFinalPrice, DEFAULT_PRODUCT_PLACEHOLDER);
+        dataUrl = previewCanvasRef.current.toDataURL('image/png', 0.95);
+      }
+
       const link = document.createElement('a');
       const safeTitle = currentProduct.title
         .toLowerCase()
@@ -561,19 +578,39 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
     setIsExporting(true);
     try {
       await renderFlyerToCanvas(previewCanvasRef.current, currentProduct, effectiveFinalPrice, customImageOverride);
-      previewCanvasRef.current.toBlob(async (blob) => {
-        if (!blob) throw new Error('No se pudo generar el archivo de imagen.');
-        try {
-          await navigator.clipboard.write([
-            new ClipboardItem({ 'image/png': blob })
-          ]);
-          setCopiedSuccess(true);
-          setTimeout(() => setCopiedSuccess(false), 3000);
-        } catch {
-          // If ClipboardItem write not supported, fallback to download
-          handleDownloadSingle();
-        }
-      }, 'image/png');
+
+      const tryExportBlob = async (): Promise<Blob> => {
+        return new Promise((resolve, reject) => {
+          try {
+            previewCanvasRef.current!.toBlob((blob) => {
+              if (blob) resolve(blob);
+              else reject(new Error('No se pudo generar el archivo de imagen.'));
+            }, 'image/png');
+          } catch (blobErr) {
+            reject(blobErr);
+          }
+        });
+      };
+
+      let blob: Blob;
+      try {
+        blob = await tryExportBlob();
+      } catch (firstErr) {
+        console.warn('Canvas blob export tainted, forcing clean placeholder render:', firstErr);
+        await renderFlyerToCanvas(previewCanvasRef.current, currentProduct, effectiveFinalPrice, DEFAULT_PRODUCT_PLACEHOLDER);
+        blob = await tryExportBlob();
+      }
+
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]);
+        setCopiedSuccess(true);
+        setTimeout(() => setCopiedSuccess(false), 3000);
+      } catch {
+        // If ClipboardItem write not supported, fallback to download
+        handleDownloadSingle();
+      }
     } catch (err: any) {
       alert('No se pudo copiar la imagen: ' + err.message);
     } finally {
@@ -601,7 +638,14 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
 
       try {
         await renderFlyerToCanvas(offscreenCanvas, prod);
-        const dataUrl = offscreenCanvas.toDataURL('image/png', 0.95);
+        let dataUrl = '';
+        try {
+          dataUrl = offscreenCanvas.toDataURL('image/png', 0.95);
+        } catch {
+          await renderFlyerToCanvas(offscreenCanvas, prod, undefined, DEFAULT_PRODUCT_PLACEHOLDER);
+          dataUrl = offscreenCanvas.toDataURL('image/png', 0.95);
+        }
+
         const link = document.createElement('a');
         const safeTitle = prod.title
           .toLowerCase()
@@ -1056,7 +1100,9 @@ export const ProductFlyerGenerator: React.FC<ProductFlyerGeneratorProps> = ({
                     onChange={(e) => setShowInstallments(e.target.checked)}
                     className="w-4 h-4 rounded border-slate-700 text-indigo-600"
                   />
-                  <span>Cartel 3 Cuotas Fijas</span>
+                  <span>
+                    Cartel {settings.installmentsCount || 3} Cuotas {settings.installmentsType === 'fixed' ? 'Fijas' : 'Sin Interés'}
+                  </span>
                 </label>
               </div>
             </div>

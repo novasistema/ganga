@@ -123,7 +123,7 @@ export const DEFAULT_CATEGORIES: StoreCategory[] = [
 ];
 
 export const DEFAULT_SETTINGS: CompanySettings = {
-  companyName: 'Nova Import',
+  companyName: 'NOVA IMPORTADOR',
   email: 'contacto@novaimport.com',
   phone: '+54 9 11 4055-7890',
   whatsappNumber: '5491140557890',
@@ -151,6 +151,10 @@ export const DEFAULT_SETTINGS: CompanySettings = {
   mercadoPagoPublicKey: '',
   mercadoPagoAliasCvu: 'DISTRIBUIDORA.BRUZZONE.MP',
   mercadoPagoNotificationWebhookUrl: '',
+  enableInstallments: true,
+  installmentsCount: 3,
+  installmentsType: 'interest_free',
+  installmentsMinAmount: 0,
   updatedAt: new Date().toISOString()
 };
 

@@ -179,52 +179,35 @@ export const ProductDetailModal: React.FC = () => {
                 );
               }
 
-              if (activeReseller) {
-                const calc = calculateProductPriceForViajante(selectedProduct);
-                return (
-                  <div className="mt-3 p-3.5 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-200">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 bg-amber-200/80 px-2 py-0.5 rounded-full">
-                        💼 Tarifa Viajante ({activeReseller.assignedPriceListName || 'Lista Asignada'})
-                      </span>
-                      <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                        +{calc.markupPercentage}% margen
-                      </span>
-                    </div>
-                    <div className="flex items-baseline gap-2.5">
-                      <span className="text-2xl sm:text-3xl font-black text-gray-950">
-                        {formatCurrency(calc.viajantePrice)}
-                      </span>
-                      <span className="text-xs text-gray-500 font-medium line-through">
-                        Tienda: {formatCurrency(selectedProduct.finalPrice)}
-                      </span>
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-amber-200/60 flex items-center justify-between text-xs">
-                      <span className="text-gray-600 font-medium">Ganancia por unidad:</span>
-                      <span className="font-black text-emerald-700">
-                        +{formatCurrency(calc.profitPerUnit)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              }
+              const displayPrice = activeReseller
+                ? calculateProductPriceForViajante(selectedProduct).viajantePrice
+                : selectedProduct.finalPrice;
+
+              const isInstallmentsEnabled =
+                settings.enableInstallments !== false &&
+                (!settings.installmentsMinAmount || displayPrice >= settings.installmentsMinAmount);
+
+              const installmentsCount = settings.installmentsCount || 3;
+              const isInterestFree = settings.installmentsType !== 'fixed';
+              const installments = Math.round(displayPrice / installmentsCount);
 
               return (
                 <div className="mt-3 p-3.5 bg-gray-50 rounded-2xl border border-gray-100">
                   <div className="flex items-baseline gap-2.5">
                     <span className="text-2xl sm:text-3xl font-black text-gray-950">
-                      {formatCurrency(selectedProduct.finalPrice)}
+                      {formatCurrency(displayPrice)}
                     </span>
-                    <span className="text-xs text-gray-400 line-through">
-                      {formatCurrency(Math.round(selectedProduct.finalPrice * 1.35))}
-                    </span>
-                    <span className="bg-rose-100 text-rose-700 text-[10px] font-black px-1.5 py-0.5 rounded-md">
-                      AHORRAS 35%
-                    </span>
+                    {selectedProduct.originalPrice && selectedProduct.originalPrice > 0 && !activeReseller && (
+                      <span className="text-xs text-gray-400 line-through">
+                        {formatCurrency(Math.round(selectedProduct.finalPrice * 1.35))}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-xs text-emerald-600 font-semibold mt-1">
-                    💳 Hasta 3 cuotas fijas de {formatCurrency(Math.round(selectedProduct.finalPrice / 3))}
-                  </p>
+                  {isInstallmentsEnabled && (
+                    <p className="text-xs font-semibold text-emerald-600 mt-1">
+                      💳 {installmentsCount} cuotas {isInterestFree ? 'sin interés' : 'fijas'} de <strong>{formatCurrency(installments)}</strong>
+                    </p>
+                  )}
                 </div>
               );
             })()}

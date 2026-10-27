@@ -38,6 +38,11 @@ function StoreApp() {
   const [sortBy, setSortBy] = useState('featured');
   const [viewMode, setViewMode] = useState<'grid' | 'grouped'>('grouped');
 
+  // Sincronizar título de solapa del navegador
+  React.useEffect(() => {
+    document.title = settings.companyName ? `${settings.companyName.toUpperCase().includes('IMPORTADOR') ? settings.companyName : 'NOVA IMPORTADOR'}` : 'NOVA IMPORTADOR';
+  }, [settings.companyName]);
+
   // Filter and sort products
   const filteredProducts = useMemo(() => {
     return products

@@ -102,7 +102,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
   const [activeTab, setActiveTab] = useState<'scraper' | 'inventory' | 'orders' | 'supplier_orders' | 'clients' | 'settings' | 'super_ofertas' | 'categories' | 'banners' | 'flyers_export' | 'price_lists' | 'resellers' | 'notifications'>(initialTab || 'super_ofertas');
   const [flyerExportProductId, setFlyerExportProductId] = useState<string | undefined>(undefined);
   const [editingImageItemId, setEditingImageItemId] = useState<string | null>(null);
-  const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'company' | 'payments' | 'notifications'>('password');
+  const [settingsSubTab, setSettingsSubTab] = useState<'password' | 'company' | 'payments' | 'installments' | 'notifications'>('password');
 
   // --- BROADCAST PUSH NOTIFICATIONS STATE ---
   const [broadcastTitle, setBroadcastTitle] = useState('');
@@ -3052,6 +3052,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                     </div>
                   </div>
 
+                  {/* Modalidad General de Cuotas: Para todos o para ninguno */}
+                  <div className="flex items-center justify-between p-3 bg-slate-900/60 border border-slate-800 rounded-xl text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">💳</span>
+                      <div>
+                        <span className="font-bold text-slate-300 block">Cuotas en Catálogo (General: Para todos o ninguno)</span>
+                        <span className="text-[11px] text-slate-400">
+                          {settings.enableInstallments !== false
+                            ? `Activas para todos (${settings.installmentsCount || 3} cuotas ${settings.installmentsType === 'fixed' ? 'fijas' : 'sin interés'}). Se configuran desde Ajustes > Cuotas.`
+                            : 'Desactivadas para todos (solo contado directo). Se configuran desde Ajustes > Cuotas.'}
+                        </span>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${
+                      settings.enableInstallments !== false
+                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                        : 'bg-slate-700/50 text-slate-400 border-slate-700'
+                    }`}>
+                      {settings.enableInstallments !== false ? 'Activas' : 'Desactivadas'}
+                    </span>
+                  </div>
+
                   <div>
                     <div className="flex justify-between items-center mb-1">
                       <label className="text-[11px] text-slate-400">URL de Imagen del Producto</label>
@@ -3902,6 +3924,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
 
               <button
                 type="button"
+                onClick={() => setSettingsSubTab('installments')}
+                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  settingsSubTab === 'installments'
+                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
+                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                <CreditCard className="w-4 h-4 text-emerald-400" />
+                <span>💳 Cuotas & Financiación</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setSettingsSubTab('notifications')}
                 className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
                   settingsSubTab === 'notifications'
@@ -4371,6 +4406,164 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, initialTab }) =
                   </div>
                 </div>
               )}
+            {/* SECTION: INSTALLMENTS & FINANCING */}
+            {(settingsSubTab === 'installments' || (settingsSubTab as any) === 'all') && (
+              <div className="bg-slate-950 p-6 rounded-3xl border border-emerald-800/50 shadow-xl space-y-6 animate-fade-in">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                      <CreditCard className="w-4 h-4" />
+                      <span>Configuración General de Cuotas y Financiación</span>
+                    </div>
+                    <h3 className="text-lg font-black text-white mt-0.5">
+                      Cuotas en Productos: Para Todos o Para Ninguno
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Rige en el 100% del catálogo. Si se desactiva, <strong>ningún producto</strong> muestra cuotas; si se activa, <strong>todos los productos</strong> muestran cuotas.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-extrabold px-3 py-1.5 rounded-full border ${
+                      settingsForm.enableInstallments !== false
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                        : 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                    }`}>
+                      {settingsForm.enableInstallments !== false ? '✓ Habilitado para TODOS' : '✕ Desactivado para TODOS'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Master Switch: Para todos o para ninguno */}
+                <div className={`p-4 border rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all ${
+                  settingsForm.enableInstallments !== false
+                    ? 'bg-emerald-950/20 border-emerald-800/50'
+                    : 'bg-slate-900 border-slate-800'
+                }`}>
+                  <div>
+                    <h4 className="text-sm font-extrabold text-white flex items-center gap-2">
+                      <span>{settingsForm.enableInstallments !== false ? '💳 Cuotas activas en TODOS los productos' : '🚫 Cuotas desactivadas en TODOS los productos'}</span>
+                    </h4>
+                    <p className="text-xs text-slate-400 mt-1 max-w-xl">
+                      {settingsForm.enableInstallments !== false
+                        ? 'Todos los productos muestran el precio de contado y el desglose en cuotas (tienda, modal de producto, flyers y placas).'
+                        : 'Ningún producto muestra cálculo de cuotas. Todos los artículos muestran exclusivamente su precio de venta directo en pesos ($).'}
+                    </p>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={settingsForm.enableInstallments !== false}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, enableInstallments: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-14 h-7 bg-slate-800 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-1 after:bg-white after:border-slate-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+
+                {/* Parameters if enabled */}
+                {settingsForm.enableInstallments !== false && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                    {/* Number of installments */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 block mb-1">
+                        Cantidad de Cuotas
+                      </label>
+                      <select
+                        value={settingsForm.installmentsCount || 3}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, installmentsCount: Number(e.target.value) })}
+                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-emerald-500"
+                      >
+                        <option value={2}>2 Cuotas</option>
+                        <option value={3}>3 Cuotas (Estándar)</option>
+                        <option value={6}>6 Cuotas</option>
+                        <option value={9}>9 Cuotas</option>
+                        <option value={12}>12 Cuotas</option>
+                        <option value={18}>18 Cuotas</option>
+                      </select>
+                    </div>
+
+                    {/* Type: Interest free vs Fixed */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 block mb-1">
+                        Modalidad de Financiación
+                      </label>
+                      <select
+                        value={settingsForm.installmentsType || 'interest_free'}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, installmentsType: e.target.value as any })}
+                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-emerald-500"
+                      >
+                        <option value="interest_free">Sin Interés (ej: "3 cuotas sin interés")</option>
+                        <option value="fixed">Cuotas Fijas (ej: "3 cuotas fijas")</option>
+                      </select>
+                    </div>
+
+                    {/* Minimum Amount */}
+                    <div>
+                      <label className="text-xs font-bold text-slate-300 block mb-1">
+                        Monto Mínimo en $ (Opcional)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        step={500}
+                        value={settingsForm.installmentsMinAmount || 0}
+                        onChange={(e) => setSettingsForm({ ...settingsForm, installmentsMinAmount: Number(e.target.value) })}
+                        placeholder="0 para todos los productos"
+                        className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white focus:border-emerald-500 font-mono"
+                      />
+                      <span className="text-[10px] text-slate-500 mt-1 block">
+                        0 = cuotas visibles para todos los productos sin piso de precio
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Live Preview Card */}
+                <div className="bg-slate-900/80 p-4 rounded-2xl border border-slate-800 space-y-2">
+                  <span className="text-[11px] font-bold text-slate-400 block uppercase tracking-wider">
+                    👁️ Vista Previa en Tienda y Ficha de Producto:
+                  </span>
+                  <div className="p-3 bg-white rounded-xl inline-block min-w-[260px] shadow-sm">
+                    <span className="text-lg font-black text-gray-900 block">$ 30.000</span>
+                    {settingsForm.enableInstallments !== false ? (
+                      <span className="text-xs font-semibold text-emerald-600 block mt-0.5">
+                        💳 {settingsForm.installmentsCount || 3} cuotas {settingsForm.installmentsType === 'fixed' ? 'fijas' : 'sin interés'} de <strong>${Math.round(30000 / (settingsForm.installmentsCount || 3)).toLocaleString('es-AR')}</strong>
+                      </span>
+                    ) : (
+                      <span className="text-xs font-semibold text-slate-400 block mt-0.5">
+                        (Sin cuotas - Solo precio de venta directo)
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Save button bar */}
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-end">
+
+                  <button
+                    type="button"
+                    disabled={isSavingSettings}
+                    onClick={async () => {
+                      setIsSavingSettings(true);
+                      try {
+                        await saveSettings(settingsForm);
+                        setSettingsSavedSuccess(true);
+                        setTimeout(() => setSettingsSavedSuccess(false), 3000);
+                      } finally {
+                        setIsSavingSettings(false);
+                      }
+                    }}
+                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>{isSavingSettings ? 'Guardando...' : 'Guardar Configuración de Cuotas'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             </form>
           </div>
         )}

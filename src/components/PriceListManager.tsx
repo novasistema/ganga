@@ -208,12 +208,9 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
       lines.push(``);
       lines.push(`${idx + 1}. *${p.title.toUpperCase()}*`);
       lines.push(`   🏷️ Categoría: ${p.category}`);
-      lines.push(`   💰 *Tu Costo Mayorista:* ${formatCurrency(calc.resellerCost)}`);
-      if (showSuggestedPvp) {
-        lines.push(`   🏷️ *Precio Venta Sugerido (PVP):* ${formatCurrency(calc.suggestedPvp)}`);
-      }
+      lines.push(`   💲 *Precio Final de Venta:* ${formatCurrency(calc.suggestedPvp)}`);
       if (showResellerProfit) {
-        lines.push(`   💵 *TU GANANCIA POR VENTA:* +${formatCurrency(calc.resellerProfitAmount)} (+${resellerMarkup}%)`);
+        lines.push(`   💵 *Tu Ganancia (+${resellerMarkup}%):* +${formatCurrency(calc.resellerProfitAmount)} (Base tienda: ${formatCurrency(calc.resellerCost)})`);
       }
     });
 
@@ -244,11 +241,11 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
       'ID',
       'Producto',
       'Categoría',
-      ...(hideSupplierCost ? [] : ['Costo Base Proveedor']),
-      'Precio Mayorista Revendedor',
-      'Margen Revendedor (%)',
-      'Ganancia Estimada Revendedor ($)',
-      'Precio Venta Sugerido (PVP)',
+      'Precio Final Vendedor ($)',
+      'Precio Base Tienda ($)',
+      'Margen Vendedor (%)',
+      'Ganancia Vendedor ($)',
+      ...(hideSupplierCost ? [] : ['Costo Base Proveedor ($)']),
       'Viajante Asignado',
       'WhatsApp Viajante',
       'Stock'
@@ -260,11 +257,11 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
         `"${p.id}"`,
         `"${p.title.replace(/"/g, '""')}"`,
         `"${p.category}"`,
-        ...(hideSupplierCost ? [] : [calc.baseCost]),
+        calc.suggestedPvp,
         calc.resellerCost,
         `${resellerMarkup}%`,
         calc.resellerProfitAmount,
-        calc.suggestedPvp,
+        ...(hideSupplierCost ? [] : [calc.baseCost]),
         `"${effectiveSellerName}"`,
         `"${effectiveSellerPhone}"`,
         p.stock
@@ -291,23 +288,55 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
   // Helper to load image through proxy safely for canvas
   const loadCORSImage = (src: string): Promise<HTMLImageElement> => {
     return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-
-      let targetSrc = resolveImageUrl(src);
-      if (targetSrc.startsWith('http://') || targetSrc.startsWith('https://')) {
-        targetSrc = `/api/image-proxy?url=${encodeURIComponent(targetSrc)}`;
+      const cleanSrc = (src || '').trim();
+      if (!cleanSrc || cleanSrc === DEFAULT_PRODUCT_PLACEHOLDER) {
+        const placeholderImg = new Image();
+        placeholderImg.crossOrigin = 'anonymous';
+        placeholderImg.onload = () => resolve(placeholderImg);
+        placeholderImg.onerror = () => resolve(placeholderImg);
+        placeholderImg.src = DEFAULT_PRODUCT_PLACEHOLDER;
+        return;
       }
 
-      img.onload = () => resolve(img);
-      img.onerror = () => {
-        const fallback = new Image();
-        fallback.crossOrigin = 'anonymous';
-        fallback.onload = () => resolve(fallback);
-        fallback.onerror = () => resolve(fallback);
-        fallback.src = DEFAULT_PRODUCT_PLACEHOLDER;
+      if (cleanSrc.startsWith('data:') || cleanSrc.startsWith('blob:')) {
+        const directImg = new Image();
+        directImg.crossOrigin = 'anonymous';
+        directImg.onload = () => resolve(directImg);
+        directImg.onerror = () => resolve(directImg);
+        directImg.src = cleanSrc;
+        return;
+      }
+
+      // Try candidates: Weserv CORS proxy, local proxy, direct URL
+      const candidates: string[] = [];
+      if (cleanSrc.startsWith('http://') || cleanSrc.startsWith('https://')) {
+        candidates.push(`https://images.weserv.nl/?url=${encodeURIComponent(cleanSrc)}&default=1`);
+        candidates.push(`/api/image-proxy?url=${encodeURIComponent(cleanSrc)}`);
+        candidates.push(cleanSrc);
+      } else {
+        candidates.push(cleanSrc);
+      }
+
+      let candidateIndex = 0;
+      const tryNext = () => {
+        if (candidateIndex >= candidates.length) {
+          const fallback = new Image();
+          fallback.crossOrigin = 'anonymous';
+          fallback.onload = () => resolve(fallback);
+          fallback.onerror = () => resolve(fallback);
+          fallback.src = DEFAULT_PRODUCT_PLACEHOLDER;
+          return;
+        }
+
+        const url = candidates[candidateIndex++];
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => tryNext();
+        img.src = url;
       };
-      img.src = targetSrc;
+
+      tryNext();
     });
   };
 
@@ -443,12 +472,10 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
         ctx.fillText('#', 55, tableHeadY + 31);
         ctx.fillText('FOTO', 95, tableHeadY + 31);
         ctx.fillText('PRODUCTO', 185, tableHeadY + 31);
-        ctx.fillText('COSTO MAYORISTA', 670, tableHeadY + 31);
+        ctx.fillText('PRECIO FINAL VENTA', 670, tableHeadY + 31);
         if (showResellerProfit) {
-          ctx.fillText('TU GANANCIA', 890, tableHeadY + 31);
-        }
-        if (showSuggestedPvp) {
-          ctx.fillText('PVP SUGERIDO', 1045, tableHeadY + 31);
+          ctx.fillText('BASE TIENDA', 890, tableHeadY + 31);
+          ctx.fillText('TU GANANCIA', 1045, tableHeadY + 31);
         }
 
         // Draw Rows
@@ -498,23 +525,20 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
           const catStr = (p.category || 'General').length > 18 ? p.category.slice(0, 16) + '..' : (p.category || 'General');
           ctx.fillText(`🏷️ ${catStr}`, 195, currentY + 72);
 
-          // Wholesale Price (What reseller pays)
-          ctx.fillStyle = '#38bdf8';
+          // Precio Final Asignado para el Vendedor (Precio Tienda + % Vendedor)
+          ctx.fillStyle = '#4ade80';
           ctx.font = '900 22px monospace';
-          ctx.fillText(formatCurrency(calc.resellerCost), 670, currentY + 54);
+          ctx.fillText(formatCurrency(calc.suggestedPvp), 670, currentY + 54);
 
-          // Reseller Profit
+          // Breakdown if showResellerProfit
           if (showResellerProfit) {
-            ctx.fillStyle = '#4ade80';
-            ctx.font = '900 22px monospace';
-            ctx.fillText(`+${formatCurrency(calc.resellerProfitAmount)}`, 890, currentY + 54);
-          }
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '900 18px monospace';
+            ctx.fillText(formatCurrency(calc.resellerCost), 890, currentY + 54);
 
-          // Suggested PVP
-          if (showSuggestedPvp) {
             ctx.fillStyle = '#fbbf24';
-            ctx.font = '900 20px monospace';
-            ctx.fillText(formatCurrency(calc.suggestedPvp), 1045, currentY + 54);
+            ctx.font = '900 18px monospace';
+            ctx.fillText(`+${formatCurrency(calc.resellerProfitAmount)}`, 1045, currentY + 54);
           }
 
           currentY += rowH;
@@ -637,7 +661,7 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
           const titleLine1 = p.title.length > 28 ? p.title.slice(0, 27) + '...' : p.title;
           ctx.fillText(titleLine1, cardX + 16, cardY + 250);
 
-          // Wholesale Price Box
+          // Precio Final Asignado Box (Precio Tienda + % Ganancia Vendedor)
           ctx.fillStyle = '#1e293b';
           ctx.beginPath();
           ctx.roundRect(cardX + 14, cardY + 275, cardW - 28, 55, 12);
@@ -645,11 +669,11 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
 
           ctx.fillStyle = '#94a3b8';
           ctx.font = 'bold 11px sans-serif';
-          ctx.fillText('PRECIO MAYORISTA:', cardX + 26, cardY + 295);
+          ctx.fillText('PRECIO FINAL DE VENTA:', cardX + 26, cardY + 295);
 
-          ctx.fillStyle = '#38bdf8';
+          ctx.fillStyle = '#4ade80';
           ctx.font = '900 20px monospace';
-          ctx.fillText(formatCurrency(calc.resellerCost), cardX + 26, cardY + 320);
+          ctx.fillText(formatCurrency(calc.suggestedPvp), cardX + 26, cardY + 320);
 
           // Reseller Profit Box
           if (showResellerProfit) {
@@ -665,22 +689,9 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
             ctx.font = 'bold 11px sans-serif';
             ctx.fillText(`TU GANANCIA (+${resellerMarkup}%):`, cardX + 26, cardY + 363);
 
-            ctx.fillStyle = '#4ade80';
-            ctx.font = '900 22px monospace';
-            ctx.fillText(`+${formatCurrency(calc.resellerProfitAmount)}`, cardX + 26, cardY + 392);
-          } else if (showSuggestedPvp) {
-            ctx.fillStyle = 'rgba(245, 158, 11, 0.15)';
-            ctx.beginPath();
-            ctx.roundRect(cardX + 14, cardY + 342, cardW - 28, 65, 12);
-            ctx.fill();
-
-            ctx.fillStyle = '#f59e0b';
-            ctx.font = 'bold 11px sans-serif';
-            ctx.fillText('PVP SUGERIDO:', cardX + 26, cardY + 363);
-
             ctx.fillStyle = '#fbbf24';
             ctx.font = '900 22px monospace';
-            ctx.fillText(formatCurrency(calc.suggestedPvp), cardX + 26, cardY + 392);
+            ctx.fillText(`+${formatCurrency(calc.resellerProfitAmount)}`, cardX + 26, cardY + 392);
           }
         });
 
@@ -759,22 +770,17 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
                 <h3 class="product-title">${p.title}</h3>
                 
                 <div class="price-row">
-                  <div>
-                    <span class="label">Precio Mayorista:</span>
-                    <span class="price-wholesale">${formatCurrency(calc.resellerCost)}</span>
+                  <div class="final-price-box">
+                    <span class="label">PRECIO FINAL DE VENTA:</span>
+                    <span class="price-wholesale font-black text-emerald-400">${formatCurrency(calc.suggestedPvp)}</span>
                   </div>
                   ${showResellerProfit ? `
                   <div class="profit-box">
                     <span class="profit-label">Tu Ganancia (+${resellerMarkup}%):</span>
                     <span class="profit-amount">+${formatCurrency(calc.resellerProfitAmount)}</span>
+                    <span class="cost-note" style="display:block; font-size:10px; color:#94a3b8; margin-top:2px;">(Base tienda: ${formatCurrency(calc.resellerCost)})</span>
                   </div>` : ''}
                 </div>
-
-                ${showSuggestedPvp ? `
-                <div class="pvp-row">
-                  <span>PVP Sugerido al Público:</span>
-                  <strong>${formatCurrency(calc.suggestedPvp)}</strong>
-                </div>` : ''}
 
                 ${cleanWa ? `
                 <a href="https://wa.me/${cleanWa}?text=${waOrderText}" target="_blank" class="btn-order">
@@ -1937,12 +1943,12 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
                       <th className="py-2.5 px-2 w-16">Foto</th>
                       <th className="py-2.5 px-3">Producto</th>
                       <th className="py-2.5 px-3">Categoría</th>
-                      <th className="py-2.5 px-3 text-right">Precio Mayorista</th>
+                      <th className="py-2.5 px-4 text-right text-slate-950 font-black">Precio Final Venta</th>
                       {showResellerProfit && (
-                        <th className="py-2.5 px-3 text-right text-emerald-800">Tu Ganancia (+{resellerMarkup}%)</th>
-                      )}
-                      {showSuggestedPvp && (
-                        <th className="py-2.5 px-3 text-right">PVP Sugerido</th>
+                        <>
+                          <th className="py-2.5 px-3 text-right text-slate-500 font-medium">Base Tienda</th>
+                          <th className="py-2.5 px-3 text-right text-emerald-800">Tu Ganancia (+{resellerMarkup}%)</th>
+                        </>
                       )}
                     </tr>
                   </thead>
@@ -1975,18 +1981,18 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
                             <td className="py-2.5 px-3 font-medium text-slate-700 text-xs">
                               {p.category || 'General'}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900 text-xs">
-                              {formatCurrency(calc.resellerCost)}
+                            <td className="py-2.5 px-4 text-right font-mono font-black text-slate-950 text-sm">
+                              {formatCurrency(calc.suggestedPvp)}
                             </td>
                             {showResellerProfit && (
-                              <td className="py-2.5 px-3 text-right font-mono font-black text-emerald-700 text-xs">
-                                +{formatCurrency(calc.resellerProfitAmount)}
-                              </td>
-                            )}
-                            {showSuggestedPvp && (
-                              <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-800 text-xs">
-                                {formatCurrency(calc.suggestedPvp)}
-                              </td>
+                              <>
+                                <td className="py-2.5 px-3 text-right font-mono text-slate-500 text-xs">
+                                  {formatCurrency(calc.resellerCost)}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700 text-xs">
+                                  +{formatCurrency(calc.resellerProfitAmount)}
+                                </td>
+                              </>
                             )}
                           </tr>
                         );
@@ -2029,10 +2035,12 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
                         </div>
 
                         <div className="mt-3 pt-2.5 border-t border-slate-200 space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-slate-600 font-bold text-[10px]">Costo Mayorista:</span>
-                            <span className="font-mono font-black text-slate-950 text-xs">
-                              {formatCurrency(calc.resellerCost)}
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center">
+                            <span className="text-slate-500 font-bold text-[9px] uppercase tracking-wider block">
+                              Precio Final de Venta
+                            </span>
+                            <span className="font-mono font-black text-slate-950 text-base block mt-0.5">
+                              {formatCurrency(calc.suggestedPvp)}
                             </span>
                           </div>
 
@@ -2041,15 +2049,6 @@ export const PriceListManager: React.FC<PriceListManagerProps> = ({ onClose }) =
                               <span className="text-emerald-800 font-bold text-[10px]">Tu Ganancia (+{resellerMarkup}%):</span>
                               <span className="font-mono font-black text-emerald-800 text-xs">
                                 +{formatCurrency(calc.resellerProfitAmount)}
-                              </span>
-                            </div>
-                          )}
-
-                          {showSuggestedPvp && (
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-slate-500 font-medium text-[10px]">PVP Sugerido:</span>
-                              <span className="font-mono font-bold text-slate-700 text-xs">
-                                {formatCurrency(calc.suggestedPvp)}
                               </span>
                             </div>
                           )}

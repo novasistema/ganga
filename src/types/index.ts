@@ -21,6 +21,8 @@ export interface Product {
   catalogPageSource?: number;
   inStock: boolean;
   featured?: boolean;
+  hasInstallments?: boolean; // Permite activar o desactivar cuotas para este producto individualmente
+  customInstallmentsCount?: number; // Cuotas específicas para este producto (ej: 3, 6, 12)
   rating?: number;
   reviewsCount?: number;
   createdAt?: string;
@@ -287,6 +289,11 @@ export interface CompanySettings {
   priceLists?: ResellerPriceList[];
   resellers?: ResellerUser[];
   hideBannerFeatures?: boolean; // Permite desactivar globalmente las tarjetas de beneficios en todos los banners
+  // Configuración de Cuotas / Financiación en productos en general
+  enableInstallments?: boolean; // Habilitar o deshabilitar cuotas en productos en general (default: true)
+  installmentsCount?: number;   // Cantidad de cuotas ofrecidas (ej: 3, 6, 9, 12. Default: 3)
+  installmentsType?: 'fixed' | 'interest_free'; // 'interest_free' ("sin interés") o 'fixed' ("fijas")
+  installmentsMinAmount?: number; // Monto mínimo en $ para ofrecer cuotas (0 para sin mínimo)
   updatedAt?: string;
 }
 

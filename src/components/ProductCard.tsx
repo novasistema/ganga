@@ -51,8 +51,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const viajanteCalc = activeReseller ? calculateProductPriceForViajante(product) : null;
   const displayPrice = isAgotado ? 0 : (viajanteCalc ? viajanteCalc.viajantePrice : product.finalPrice);
 
-  // Estimated 3 installments calculation
-  const installmentPrice = isAgotado ? 0 : Math.round(displayPrice / 3);
+  // Installments configuration & calculation: strictly general for all or none
+  const isInstallmentsEnabled =
+    !isAgotado &&
+    settings.enableInstallments !== false &&
+    (!settings.installmentsMinAmount || displayPrice >= settings.installmentsMinAmount);
+
+  const installmentsCount = settings.installmentsCount || 3;
+  const isInterestFree = settings.installmentsType !== 'fixed';
+  const installmentPrice = isAgotado || !isInstallmentsEnabled ? 0 : Math.round(displayPrice / installmentsCount);
 
   return (
     <div
@@ -103,11 +110,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             </span>
           ) : (
             <>
-              {viajanteCalc && (
-                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md shadow-md uppercase tracking-wider">
-                  💼 MODO VIAJANTE
-                </span>
-              )}
 
               {product.featured && (
                 <span className="inline-flex items-center gap-1 bg-amber-400 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-md shadow-xs uppercase tracking-wider">
@@ -185,33 +187,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                   🚫 No disponible actualmente para compra
                 </p>
               </div>
-            ) : viajanteCalc ? (
-              <div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xl font-black text-emerald-700 tracking-tight">
-                    {formatCurrency(viajanteCalc.viajantePrice)}
-                  </span>
-                  <span className="text-xs text-slate-400 font-medium">
-                    (Base: {formatCurrency(viajanteCalc.storePrice)})
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md border border-emerald-300">
-                    +{viajanteCalc.markupPercentage}% Ganancia
-                  </span>
-                  <span className="text-[11px] font-bold text-emerald-600">
-                    Ganás +{formatCurrency(viajanteCalc.profitPerUnit)}
-                  </span>
-                </div>
-              </div>
             ) : (
               <div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-xl font-black text-gray-950 tracking-tight">
-                    {formatCurrency(product.finalPrice)}
+                    {formatCurrency(displayPrice)}
                   </span>
-                  {product.originalPrice && product.originalPrice > 0 && (
+                  {product.originalPrice && product.originalPrice > 0 && !viajanteCalc && (
                     <span className="text-xs text-gray-400 line-through">
                       {formatCurrency(Math.round(product.finalPrice * 1.35))}
                     </span>
@@ -219,9 +201,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 </div>
 
                 {/* Installments notice */}
-                <p className="text-[11px] font-medium text-emerald-600 mt-0.5">
-                  3 cuotas fijas de <strong className="font-bold">{formatCurrency(installmentPrice)}</strong>
-                </p>
+                {isInstallmentsEnabled && (
+                  <p className="text-[11px] font-medium text-emerald-600 mt-0.5">
+                    💳 {installmentsCount} cuotas {isInterestFree ? 'sin interés' : 'fijas'} de <strong className="font-bold">{formatCurrency(installmentPrice)}</strong>
+                  </p>
+                )}
               </div>
             )}
           </div>

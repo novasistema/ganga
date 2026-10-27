@@ -479,16 +479,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Cart operations
   const addToCart = (product: Product, quantity = 1) => {
+    let productToAdd = product;
+    if (activeReseller) {
+      const calc = calculateProductPriceForViajante(product);
+      if (calc.viajantePrice > 0) {
+        productToAdd = {
+          ...product,
+          finalPrice: calc.viajantePrice
+        };
+      }
+    }
+
     setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
+      const existing = prev.find((item) => item.product.id === productToAdd.id);
       if (existing) {
         return prev.map((item) =>
-          item.product.id === product.id
+          item.product.id === productToAdd.id
             ? { ...item, quantity: item.quantity + quantity }
             : item
         );
       }
-      return [...prev, { product, quantity }];
+      return [...prev, { product: productToAdd, quantity }];
     });
   };
 
@@ -1262,12 +1273,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       markup = activeReseller.commissionPercentage;
     }
 
-    // Base calculation: 'store_price' (default) uses product.finalPrice; 'wholesale_cost' uses product.originalPrice
-    const calcBase = listToUse?.calculationBase || 'store_price';
-    const basePrice = (calcBase === 'wholesale_cost' && product.originalPrice)
-      ? product.originalPrice
-      : storePrice;
-
+    // El precio de venta para el vendedor es siempre: precio final de tienda + porcentaje del vendedor
+    const basePrice = storePrice > 0 ? storePrice : (product.originalPrice || 0);
     const viajantePrice = Math.round(basePrice * (1 + markup / 100));
     const profitPerUnit = viajantePrice - storePrice;
 
